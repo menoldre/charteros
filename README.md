@@ -61,6 +61,7 @@ CharterOS ships a public conformance suite, mechanically graded, runnable by any
 
 - **Apache-2.0, permanently.** This project publicly commits to never relicensing the core.
 - **DCO, not CLA.** No entity accumulates the rights that make a future rug-pull possible.
+- **No tolls.** CharterOS never takes a transaction fee on the work or payments it coordinates. If agent-to-agent commerce runs through it, the escrow logic is open and the rails are pluggable.
 - **Falsifiable claims only.** Every headline capability has a shipping test. No self-scored leaderboards.
 - **AI-assisted contributions welcome, disclosed, issue-first.** See CONTRIBUTING.md and AGENTS.md (arriving with Milestone 0).
 
