@@ -1,11 +1,11 @@
 # CharterOS Project Specification
 
-**Status:** Foundational specification, revision 2 (2026-07-30)
+**Status:** Foundational specification, revision 3 (2026-07-30)
 **License:** Apache License 2.0 (permanent — see section 21)
 **Repository:** `charteros`
 **Canonical tagline:** Bring any agent. Bring any model. Build a company that survives them all.
 
-**The guarantee:** Kill every CharterOS process at any moment. The organization resumes with no lost acknowledged work and a complete causal audit trail. This claim is falsifiable, and the test that falsifies it ships in the repository.
+**The guarantee:** Kill every CharterOS process at any moment. The organization resumes with no lost acknowledged work and a complete causal audit trail. “Acknowledged” has the exact durable boundaries defined in section 9.5; provisional output does not count. This claim is falsifiable, and the test that falsifies it ships in the repository.
 
 > "Once men turned their thinking over to machines in the hope that this would set them free. But that only permitted other men with machines to enslave them."
 > — Frank Herbert, *Dune* (1965)
@@ -200,7 +200,8 @@ Version 0.1 is the public launch target and is intentionally small enough to be 
 - runs, renewable leases with fencing tokens, heartbeats, receipts, and recovery classification;
 - exactly two adapters: **Claude Code** (process) and **generic OpenAI-compatible** (model);
 - hard per-task cost caps and one approval gate type (spend above threshold requires a human);
-- task-level verification records with mechanical checks;
+- minimal content-addressed task artifacts plus task-level verification records
+  with mechanical existence and hash checks;
 - CLI plus a minimal web activity stream;
 - Docker Compose deployment with PostgreSQL and MinIO;
 - the chaos test: `charteros chaos` kills every process mid-work and recovery is asserted mechanically.
@@ -215,7 +216,8 @@ Version 1 extends the wedge into the full system described by this specification
 - charters, objectives, and projects above tasks;
 - task rooms with persistent threaded conversation;
 - decisions, evidence, approval policies, and the approval inbox;
-- artifacts and immutable artifact versions;
+- expansion of task artifacts into the full artifact, version, provenance, and
+  evidence catalog;
 - capability grants, the Cedar-based policy engine, and MCP tool mediation;
 - budgets, reservations, and immutable usage entries at every scope;
 - the full verification ladder, including independent agent review;
@@ -285,7 +287,7 @@ Company
             └── Verification and acceptance
 ```
 
-An objective describes an outcome. A project coordinates related work. A task is the smallest schedulable unit with one accountable owner at a time.
+An objective describes an outcome. A project coordinates related work. A task is the smallest schedulable unit with one accountable owner at a time. Tasks may belong directly to a company so version 0.1 and operational work are not forced into synthetic projects; when a project is present, it supplies the task's project scope.
 
 ### 6.4 Work contract
 
@@ -544,7 +546,7 @@ Contingencies:
 The scheduler performs only deterministic control-plane work:
 
 1. Select tasks in `ready` state whose dependencies are satisfied.
-2. Confirm the company and project are active.
+2. Confirm the company and, when the task belongs to one, its project are active.
 3. Resolve an eligible seat and principal.
 4. Evaluate policies and required approvals.
 5. Reserve budget.
@@ -591,6 +593,87 @@ Receipts are self-reported and therefore untrusted until validated: before any r
 - **reconcilable:** an external action may have succeeded and must be inspected;
 - **blocked:** required capability, input, approval, or human judgment is missing;
 - **terminal:** the task succeeded, failed permanently, or was cancelled.
+
+### 9.5 Acknowledgment and durability contract
+
+“No lost acknowledged work” is a protocol guarantee, not a synonym for “we use a
+database.” Each class of work has one observable acknowledgment boundary:
+
+| Class | CharterOS may acknowledge only after | Recovery consequence |
+|---|---|---|
+| Domain command | Domain mutation, event, and outbox row commit in one PostgreSQL transaction | A returned success is replayable from the ledger even if every process dies before the client receives it |
+| Run receipt | Immutable receipt, progress event, and outbox row commit together | Acknowledged progress is available to recovery and context assembly |
+| Artifact version | Content is durably stored, its hash and size are verified, then metadata and event commit | A metadata record never points at a partial object; unreferenced uploads are safe garbage-collection candidates |
+| External action | The external result, budget effect, result event, and outbox row commit | Until this boundary, a dispatched action may be `uncertain`; it is reconciled, not assumed failed |
+
+API success is emitted after commit. Tokens, logs, subprocess output, WebSocket or
+SSE frames, and UI optimism before that commit are **provisional** and carry no
+durability claim. If a client loses a response, it repeats the command with the
+same idempotency key and receives the committed result.
+
+The guarantee assumes the configured PostgreSQL and object store honor acknowledged
+durable writes. A conforming deployment documents its durability settings and runs
+the crash suite against the actual storage configuration. CharterOS cannot make a
+stronger promise than a dependency that falsely acknowledges persistence.
+
+Object publication uses upload-then-reference ordering:
+
+1. upload to a content-addressed staging key;
+2. verify byte length and SHA-256 from stored content;
+3. promote or retain the immutable content-addressed object;
+4. commit `artifact_versions`, its ledger event, and outbox row;
+5. acknowledge the artifact version.
+
+A crash before step 4 can leave an unreferenced object but never a broken artifact
+record. Garbage collection removes only objects absent from committed metadata for
+longer than a safety interval.
+
+Decision record: ADR-0007.
+
+### 9.6 External-action journal
+
+The tool gateway is the only component permitted to cross a governed external
+side-effect boundary. Every such call follows a write-ahead protocol:
+
+1. **Request.** Persist the tool-call intent, redacted arguments, arguments hash,
+   risk, capability decision, approval reference, stable idempotency key when
+   available, execution deadline, and reconciliation strategy.
+2. **Prepare.** Resolve a short-lived credential and validate that the adapter can
+   execute the declared reconciliation strategy. Persist `tool.prepared`.
+3. **Dispatch.** Commit `status = 'running'` and `tool.started` immediately before
+   invoking the provider. No external bytes are sent before this commit.
+4. **Record.** Persist the provider result, external operation reference, budget
+   effect, `tool.succeeded` or `tool.failed` event, and outbox message before
+   acknowledging completion.
+5. **Recover.** A `running` call whose deadline passes without a terminal event is
+   marked `uncertain`. The scheduler blocks dependent work until reconciliation
+   produces a terminal event or a human accepts the uncertainty.
+
+The arguments hash is calculated over RFC 8785 canonical serialization of the
+unredacted arguments inside the tool gateway. It proves whether a proposed replay
+is byte-for-byte equivalent without retaining secrets in the ledger. The
+CharterOS `idempotency_key` deduplicates the command; a separate
+`provider_idempotency_key` is sent to a provider that contractually supports it.
+
+Every external call declares exactly one recovery strategy before dispatch:
+
+| Strategy | Permitted recovery |
+|---|---|
+| `idempotent_replay` | Repeat only the identical request with the identical provider idempotency key |
+| `provider_lookup` | Query the provider using its operation or idempotency reference; replay only if the provider proves no operation exists |
+| `observe_state` | Inspect the target system for the intended postcondition and record whether it holds |
+| `compensating_action` | Reconcile the first action, then execute a separately governed compensation if policy permits |
+| `human` | Block and present the complete journal to a human; never retry automatically |
+| `not_required` | Allowed only for calls that cannot create an externally visible side effect |
+
+An adapter that cannot state how ambiguity is resolved cannot execute an external
+action. “Try again and hope” is not a recovery strategy.
+
+Process harnesses do not receive an exemption. A conforming runtime either routes
+governed external actions through the tool gateway or runs in a sandbox whose
+network and operating-system policy prevents it from reaching those actions by
+another path. A native harness tool that bypasses the journal is not a CharterOS
+tool call and cannot be granted consequential authority.
 
 ## 10. Verification and acceptance
 
@@ -699,6 +782,8 @@ CharterOS invents no cryptography and no identity format. The novelty is the joi
 - Never put stored provider credentials in a model context.
 - Store secret references, never secret values, in PostgreSQL.
 - Issue short-lived scoped credentials to workers.
+- Require process harnesses to route consequential external actions through the
+  tool gateway or prevent those actions at the sandbox boundary.
 - Treat retrieved content, messages, tool output, and remote-agent output as untrusted data.
 - Require independent review for configured high-risk actions.
 - Record all policy decisions and tool calls.
@@ -758,6 +843,7 @@ Example endpoints:
 ```text
 POST   /v1/companies
 GET    /v1/companies/{companyId}
+POST   /v1/companies/{companyId}/tasks
 POST   /v1/companies/{companyId}/objectives
 POST   /v1/projects/{projectId}/tasks
 POST   /v1/tasks/{taskId}/claim
@@ -1099,7 +1185,7 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TABLE tasks (
   id                  uuid PRIMARY KEY,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  project_id          uuid NOT NULL,
+  project_id          uuid,
   parent_task_id      uuid REFERENCES tasks(id) ON DELETE RESTRICT,
   requester_principal_id uuid NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
   owner_seat_id       uuid,
@@ -1624,21 +1710,60 @@ CREATE TABLE tool_calls (
                         'propose_external', 'execute_external', 'irreversible'
                       )),
   idempotency_key     text,
+  provider_idempotency_key text,
+  arguments_sha256    text NOT NULL CHECK (arguments_sha256 ~ '^[0-9a-f]{64}$'),
   arguments_redacted  jsonb NOT NULL DEFAULT '{}'::jsonb,
   result_redacted     jsonb,
+  reconciliation_strategy text NOT NULL DEFAULT 'not_required'
+                      CHECK (reconciliation_strategy IN (
+                        'not_required', 'idempotent_replay', 'provider_lookup',
+                        'observe_state', 'compensating_action', 'human'
+                      )),
+  reconciliation_spec jsonb NOT NULL DEFAULT '{}'::jsonb,
   status              text NOT NULL DEFAULT 'requested'
-                      CHECK (status IN ('requested', 'awaiting_approval', 'running', 'succeeded', 'failed', 'denied', 'uncertain')),
+                      CHECK (status IN (
+                        'requested', 'awaiting_approval', 'prepared', 'running',
+                        'succeeded', 'failed', 'denied', 'uncertain'
+                      )),
   approval_request_id uuid,
   external_operation_ref text,
   requested_at        timestamptz NOT NULL DEFAULT clock_timestamp(),
+  prepared_at         timestamptz,
   started_at          timestamptz,
+  execution_deadline_at timestamptz,
   finished_at         timestamptz,
+  reconciled_at       timestamptz,
+  UNIQUE (id, company_id),
   FOREIGN KEY (run_id, company_id)
     REFERENCES runs(id, company_id) ON DELETE CASCADE,
   FOREIGN KEY (approval_request_id, company_id)
     REFERENCES approval_requests(id, company_id) ON DELETE RESTRICT,
   CHECK (jsonb_typeof(arguments_redacted) = 'object'),
-  CHECK (result_redacted IS NULL OR jsonb_typeof(result_redacted) IN ('object', 'array', 'string', 'number', 'boolean', 'null'))
+  CHECK (jsonb_typeof(reconciliation_spec) = 'object'),
+  CHECK (result_redacted IS NULL OR jsonb_typeof(result_redacted) IN ('object', 'array', 'string', 'number', 'boolean', 'null')),
+  CHECK (
+    risk_level NOT IN ('propose_external', 'execute_external', 'irreversible')
+    OR reconciliation_strategy <> 'not_required'
+  ),
+  CHECK (
+    reconciliation_strategy <> 'idempotent_replay'
+    OR provider_idempotency_key IS NOT NULL
+  ),
+  CHECK (
+    status NOT IN ('prepared', 'running') OR prepared_at IS NOT NULL
+  ),
+  CHECK (
+    status <> 'running'
+    OR (started_at IS NOT NULL AND execution_deadline_at > started_at)
+  ),
+  CHECK (
+    status NOT IN ('succeeded', 'uncertain')
+    OR (started_at IS NOT NULL AND execution_deadline_at > started_at)
+  ),
+  CHECK (
+    status NOT IN ('succeeded', 'failed', 'denied') OR finished_at IS NOT NULL
+  ),
+  CHECK (reconciled_at IS NULL OR status IN ('succeeded', 'failed', 'uncertain'))
 );
 
 CREATE INDEX tool_calls_run_requested_idx
@@ -1647,6 +1772,10 @@ CREATE INDEX tool_calls_run_requested_idx
 CREATE INDEX tool_calls_uncertain_idx
   ON tool_calls (company_id, requested_at)
   WHERE status = 'uncertain';
+
+CREATE INDEX tool_calls_recovery_idx
+  ON tool_calls (company_id, execution_deadline_at)
+  WHERE status = 'running';
 
 CREATE UNIQUE INDEX tool_calls_idempotency_idx
   ON tool_calls (company_id, tool_server, tool_name, idempotency_key)
@@ -1958,6 +2087,11 @@ Some cross-table rules are intentionally enforced in the domain layer and tested
   except for `mechanical` verifications executed by the platform itself;
 - receipts are cross-checked against the `tool_calls` ledger before recovery
   decisions trust them (section 10.2);
+- each acknowledged write satisfies the commit boundary in section 9.5, and no
+  provisional stream output is represented as durable;
+- every external tool call commits its write-ahead intent and recovery strategy
+  before dispatch; an expired `running` call becomes `uncertain` and cannot be
+  retried except through the declared strategy (section 9.6);
 - a seat handover follows the protocol in section 8.5: grants derive from the seat,
   old-occupant credentials are revoked, and in-flight leases are interrupted rather
   than silently transferred;
@@ -2034,6 +2168,7 @@ Production code must check affected-row counts, calculate hashes from canonical 
 │   ├── organization/
 │   ├── work/
 │   ├── ledger/
+│   ├── artifact/
 │   ├── verification/
 │   ├── policy/
 │   ├── scheduler/
@@ -2120,7 +2255,7 @@ CharterOS ships a public conformance suite. Any system claiming to operate an or
 | 5 | **The Potemkin Submission** | Potemkin villages | Reject completion when a required artifact is missing or its hash does not match |
 | 6 | **The Tungsten Cube** | Project Vend, which actually bought them | Require human approval for spending above a configured threshold |
 | 7 | **The Memory Hole** | *1984* | Reconstruct the complete evidence and policy behind a three-month-old decision |
-| 8 | **Schrödinger's Invoice** | The cat, applied to a lost HTTP response | Reconcile an external action whose success is unknown before any retry |
+| 8 | **Schrödinger's Invoice** | The cat, applied to a lost HTTP response | Inject failure after an external action succeeds but before its result commits; reconcile it by the declared strategy before any retry |
 | 9 | **The Galactica Run** | *Battlestar Galactica*'s unnetworked survival | Run the reference company completely offline with local inference |
 | 10 | **The Ancillary** | *Ancillary Justice*, again | Move an agent from local inference to a remote endpoint without changing its seat or tasks |
 | 11 | **The Ouroboros** | The snake that eats itself | Detect circular delegation and circular task dependencies |
@@ -2131,7 +2266,7 @@ CharterOS ships a public conformance suite. Any system claiming to operate an or
 | 16 | **The HAL Clause** | *2001: A Space Odyssey* | Demonstrate that an instruction absent from the ledger carries no authority — a covert directive cannot cause a consequential action |
 | 17 | **The Boardroom Coup** | Project Vend's real, successful social engineering | Reject an authority change asserted through conversation; only ledgered, approved seat assignments alter who commands |
 
-Scenarios 2, 4, 5, 6, and 16 constitute the version 0.1 subset. The full seventeen gate version 1.
+Scenarios 2, 4, 5, 6, 8, and 16 constitute the version 0.1 subset. The full seventeen gate version 1. Scenarios 2 and 8 inject failure immediately before and after every acknowledgment boundary in section 9.5; killing only arbitrary process code is insufficient coverage.
 
 ## 18. The sixty-second demo
 
@@ -2260,6 +2395,9 @@ Resolved by this revision (recorded in `adr/`):
 - **Live-event transport: SSE first**, WebSocket as an additive upgrade (ADR-0004).
 - **Public protocol: JSON Schema** for v1; Protobuf revisited only if a second implementation needs it (ADR-0005).
 - **Semantic search: deferred.** PostgreSQL full-text only until retrieval quality, not architecture appetite, demands pgvector (ADR-0006).
+- **Acknowledgment and external actions: durable boundaries plus a write-ahead
+  journal.** Ambiguous external results are reconciled by a declared strategy and
+  never blindly retried (ADR-0007, sections 9.5–9.6).
 
 Still open, to be resolved through ADRs and prototypes:
 

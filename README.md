@@ -4,7 +4,7 @@
 
 CharterOS is an open-source substrate for organizations of humans and heterogeneous AI agents: a durable, append-only **work ledger** with organizational semantics on top — roles, authority, budgets, approvals, verification, and crash recovery — that no model vendor, agent framework, or hosting provider owns.
 
-**The guarantee:** kill every CharterOS process at any moment; the organization resumes with no lost acknowledged work and a complete causal audit trail. This claim is falsifiable, and the test that falsifies it ships in this repository.
+**The guarantee:** kill every CharterOS process at any moment; the organization resumes with no lost acknowledged work and a complete causal audit trail. “Acknowledged” has a [precise durable boundary](PROJECT_SPECIFICATION.md#95-acknowledgment-and-durability-contract), and the test that falsifies this claim ships in the repository.
 
 > **Status: foundational specification.** There is no code here yet — there is a [specification](PROJECT_SPECIFICATION.md) precise enough to be wrong in public, and a conformance suite designed before the system it tests. Implementation begins with [version 0.1](PROJECT_SPECIFICATION.md#5-scope): the crash-proof work ledger for agent harnesses.
 
