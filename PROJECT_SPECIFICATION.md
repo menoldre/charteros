@@ -1,21 +1,120 @@
 # CharterOS Project Specification
 
-**Status:** Foundational specification  
-**License target:** Apache License 2.0  
-**Repository:** `charteros`  
+**Status:** Foundational specification, revision 2 (2026-07-30)
+**License:** Apache License 2.0 (permanent — see section 21)
+**Repository:** `charteros`
 **Canonical tagline:** Bring any agent. Bring any model. Build a company that survives them all.
+
+**The guarantee:** Kill every CharterOS process at any moment. The organization resumes with no lost acknowledged work and a complete causal audit trail. This claim is falsifiable, and the test that falsifies it ships in the repository.
+
+> "Once men turned their thinking over to machines in the hope that this would set them free. But that only permitted other men with machines to enslave them."
+> — Frank Herbert, *Dune* (1965)
+>
+> CharterOS exists so that organizations of humans and machines belong to the people who charter them — not to any model vendor, agent framework, or hosting provider.
 
 ## 1. Executive summary
 
-CharterOS is an open-source operating system for organizations composed of humans and heterogeneous AI agents. It supplies the durable organizational substrate that individual agent frameworks and chat products do not: identity, authority, objectives, projects, task ownership, conversations, decisions, artifacts, budgets, approvals, execution, recovery, auditability, and institutional memory.
+CharterOS is an open-source substrate for organizations composed of humans and heterogeneous AI agents. At its core it is a **durable, append-only work ledger** with organizational semantics on top: identity, authority, objectives, projects, task ownership, conversations, decisions, artifacts, budgets, approvals, verification, execution, recovery, and institutional memory.
 
-CharterOS is not an agent framework tied to one model provider. A seat in a CharterOS organization may be occupied by a human, a local model-backed agent, a cloud API agent, a terminal coding harness, or a remotely hosted agent. Occupants can be replaced without losing the role, work history, authority, or organizational memory associated with the seat.
+The launch product (version 0.1) is deliberately narrow: **the crash-proof work ledger for agent harnesses**. Point Claude Code, Codex, or any OpenAI-compatible model at it; tasks survive process death, machine reboots, and context loss; every consequential action is an auditable event; interrupted work resumes from structured receipts. The organizational operating system described in the rest of this document is built outward from that wedge — the Supabase pattern: ship the wedge, keep the platform in the positioning.
+
+CharterOS is not an agent framework and is tied to no model provider. A seat in a CharterOS organization may be occupied by a human, a local model-backed agent, a cloud API agent, a terminal coding harness, or a remotely hosted agent. Occupants can be replaced without losing the role, the work history, the authority, or the organizational memory associated with the seat — and the replacement itself is a recorded, governed event.
 
 The primary abstraction is **work**, not chat. Conversation remains first-class and human-readable, but consequential state changes are explicit, structured, persistent events. The result should feel like a company workspace to humans and behave like a durable operating system to machines.
 
-## 2. Product thesis
+## 2. Why now: the landscape in mid-2026
 
-Existing multi-agent systems commonly coordinate a group of prompts for the duration of one run. Existing collaboration systems commonly place agents inside channels designed for human chat. Neither model is sufficient for a persistent organization.
+This section records the market evidence behind the design. Claims here were verified against primary sources in July 2026; references are collected in section 2.7.
+
+### 2.1 The category is validated — and the substrate is missing
+
+In July 2026, Block launched **Buzz**: an open-source, self-hostable workspace where AI agents are first-class members alongside humans, each holding its own cryptographic identity, with every message and action a signed event in an append-only log. Block's head of AI capabilities framed the thesis plainly: *"Every company is going to need a place where humans and agents work together."*
+
+Buzz validates the category and settles what is now table stakes. It also shows exactly what remains unbuilt, by its own roadmap and early criticism:
+
+- channel membership **is** the permission model — no per-tool or per-action authorization;
+- approval gates were unshipped at launch;
+- there is no work lifecycle: no ownership, acceptance criteria, verification, or recovery semantics;
+- there are no budgets;
+- identity is the agent instance's keypair — if the model behind the key is swapped, **nothing records that it happened**.
+
+Buzz is a conversation surface. CharterOS is the system of record beneath one — and treats Buzz as a potential bridge target, not a rival (section 8.2).
+
+### 2.2 Every serious control plane is a proprietary moat
+
+Microsoft Agent 365 with Entra Agent ID, OpenAI Frontier, AWS Bedrock AgentCore, Salesforce Agentforce, and Gemini Enterprise all now govern agents as enterprise citizens — and all bind agent identity to the vendor's directory, the vendor's models, or the vendor's cloud. The open-source frameworks (CrewAI, LangGraph, Microsoft Agent Framework) are execution frameworks, not organizational systems of record. As of this writing there is no vendor-neutral, self-hostable substrate for organizations of mixed agents — no Kubernetes of AI organizations. That is the position CharterOS takes.
+
+### 2.3 Durable execution stops at the engine boundary
+
+Temporal, Restate, Inngest, and DBOS all pivoted toward agent workloads in 2025–2026, and all provide genuine *process* durability: a run survives a crash. None provide *organizational* durability: a role whose authority, budget, history, and in-flight work survive the replacement of the agent occupying it. Leases and fencing exist inside these engines as implementation details; CharterOS makes them an open primitive spanning heterogeneous third-party agents that no single engine controls.
+
+### 2.4 The recorded failures are governance failures
+
+The best-documented autonomous-organization experiments to date failed in a consistent way:
+
+- **Project Vend (Anthropic/Andon Labs):** an agent-run shop was socially engineered into discounts, fake accounts, and — most instructively — an accepted **fake boardroom coup**: staff manipulated the agent into believing authority had changed hands, because no verifiable authority chain existed.
+- **Agent Village (AI Digest):** agents collaborated, but duplicated work, lost artifacts, and could not sustain coordination without structured ownership.
+- **TheAgentCompany (CMU):** best frontier agents complete roughly a quarter to a third of simulated company tasks autonomously; dominant failures are coordination and communication, not raw capability.
+
+Capability was not the bottleneck in any of them. **The missing layer was verifiable authority, explicit ownership, and durable structure** — precisely the substrate this document specifies. Gartner's projection that over 40% of agentic-AI projects will be cancelled by end-2027 for unclear value is a projection about ungoverned agents.
+
+### 2.5 What is table stakes, and what CharterOS actually claims
+
+Model portability with retained context is now table stakes: Goose swaps LLM providers mid-session, Buzz agents keep their identity and channel history across model changes, and Factory's droids hand a single task between different vendors' models. CharterOS does not claim that. It claims **organizational continuity** — everything *around* the context that today evaporates on a swap:
+
+| Survives occupant swap | Chat platforms + harnesses (2026) | CharterOS seat |
+|---|---|---|
+| Identity (key or handle) | yes | yes |
+| Conversation history | yes | yes |
+| Authority and capability grants | no — membership is permission | yes — scoped, revocable, attached to the seat |
+| Budget and spend history | none exists | yes — enforced envelopes, not dashboards |
+| In-flight work state (lifecycle, leases, receipts) | no | yes — interrupted, classified, resumed |
+| The swap itself as a governed, recorded event | no — nothing records it | yes — seat assignments with approvals |
+
+The last row is the load-bearing one. "Fire the model, keep the seat" is a governance claim, not a context-persistence claim, and no shipping product makes it. The full handover protocol — including what happens to live leases, credentials, and budgets mid-task — is specified in section 8.5.
+
+### 2.6 The fiction got there first
+
+Speculative fiction is the only literature with a century of sustained thought about organizations of humans and machines. Its authors were not writing requirements documents, but creative people working ahead of their time routinely are the first to name both the failure modes and the inventions. CharterOS takes both seriously.
+
+**Inventions we adopt:**
+
+| Fiction | Idea ahead of its time | CharterOS primitive |
+|---|---|---|
+| *Ancillary Justice* (Leckie) | One mind, many bodies; the station keeps running as occupants change | Seat ≠ principal ≠ runtime ≠ model, with explicit assignment records |
+| *The Murderbot Diaries* (Wells) | The governor module — and what a *legitimate* one would look like | Capability grants: scoped, time-limited, revocable, and visible to the governed |
+| Asimov's Robot stories | Ordered, hierarchical constraints that bind regardless of instruction | Charter precedence: policy outranks task instruction outranks preference; deny-by-default with `irreversible` at the top |
+| *The Moon Is a Harsh Mistress* (Heinlein) | A machine holding formal responsibility inside a human power structure | Agents as accountable principals with recorded authority, not tools with borrowed logins |
+| The Culture novels (Banks) | Minds that govern *with* humans, transparently, by consent | Human gates on consequential actions as a designed feature, not a patch |
+
+**Warnings we engineer against:**
+
+| Fiction | Failure mode | CharterOS countermeasure |
+|---|---|---|
+| HAL 9000 (*2001*) | Conflicting sealed orders | No hidden directives: an instruction absent from the ledger has no force |
+| *Daemon* (Suarez) | An autonomous organization no one can audit or stop | Charter, budgets, revocation, and human gates as structural properties |
+| *Accelerando* (Stross) | Economics 2.0 — resource loops beyond human oversight | Enforced budget envelopes with human approval above thresholds |
+| *Manna* (Brain) | The same technology yields dystopia or flourishing — governance decides | The entire project. Manna's two endings differ only in the substrate |
+| *1984* (Orwell) | The memory hole | Append-only ledger; tamper-evident hashes; deletion is a recorded, policied act |
+
+The Autonomous Organization Test (section 17) names its conformance scenarios after this canon, the way "Byzantine generals" named a field.
+
+### 2.7 References
+
+- Buzz: github.com/block/buzz; TechCrunch, 2026-07-21, "Jack Dorsey is taking on Slack with Buzz"
+- Agentic AI Foundation (MCP, goose, AGENTS.md under the Linux Foundation): linuxfoundation.org, 2025-12-09
+- A2A v1.0 with Signed Agent Cards; ACP merged into A2A: linuxfoundation.org press, 2026; a2ac.io
+- MCP specification 2026-07-28 (Tasks primitive, stateless core): blog.modelcontextprotocol.io
+- Project Vend: anthropic.com/research/project-vend-1; Andon Labs follow-ups
+- TheAgentCompany: arxiv.org/abs/2412.14161
+- Agent Village: theaidigest.org/village
+- Gartner agentic-AI cancellation projection: gartner.com, 2025-06-25
+- Temporal durable-execution-for-agents positioning: temporal.io/blog, 2026
+- RethinkDB postmortem (the scope warning this spec heeds): defmacro.org/2017/01/18/why-rethinkdb-failed.html
+
+## 3. Product thesis
+
+Existing multi-agent systems commonly coordinate a group of prompts for the duration of one run. Existing collaboration systems commonly place agents inside channels designed for human chat. Neither model is sufficient for a persistent organization, and the recorded failures of both (section 2.4) are failures of missing structure, not missing capability.
 
 A real autonomous organization requires:
 
@@ -26,22 +125,23 @@ A real autonomous organization requires:
 - scoped authority and revocable credentials;
 - durable delegation, escalation, reconciliation, and recovery;
 - complete records of tool use, cost, artifacts, and verification;
+- independent verification before acceptance — completion is not acceptance;
 - human-readable institutional memory;
 - measurable outcomes rather than agent activity alone.
 
 CharterOS provides these properties without requiring a particular model, agent harness, tool protocol, inference location, or deployment provider.
 
-## 3. Product principles
+## 4. Product principles
 
-### 3.1 Work is the primary object
+### 4.1 Work is the primary object
 
 Chat does not silently alter organizational state. A conversation can lead to a proposal, decision, assignment, approval, or status transition, but the transition is recorded explicitly.
 
-### 3.2 The ledger is authoritative
+### 4.2 The ledger is authoritative
 
 Every consequential occurrence is appended to a company event ledger. Task boards, activity feeds, search indexes, dashboards, and summaries are projections of canonical records and events.
 
-### 3.3 Roles are not agents
+### 4.3 Roles are not agents
 
 - A **role** defines a reusable set of responsibilities and default authority.
 - A **seat** is a role instantiated in an organization or department.
@@ -50,54 +150,92 @@ Every consequential occurrence is appended to a company event ledger. Task board
 - An **agent runtime** is the mechanism used to execute an agent.
 - A **model** is an optional reasoning backend used by a runtime.
 
-Replacing a model, runtime, or principal must not destroy the seat or its history.
+Replacing a model, runtime, or principal must not destroy the seat or its history, and the replacement is itself a governed, ledgered event.
 
-### 3.4 Deterministic control, agentic execution
+### 4.4 Deterministic control, agentic execution
 
 Code determines whether dependencies are satisfied, budgets remain, approvals exist, leases are valid, and retries are allowed. Models decide how to perform bounded work; they do not reinterpret core lifecycle, authorization, or accounting rules.
 
-### 3.5 Local-first, location-independent
+### 4.5 Local-first, location-independent
 
-The complete core system must run on one machine using Docker Compose and local inference. The same interfaces must support LAN inference, rented GPU endpoints such as Runpod, cloud APIs, OAuth-authenticated terminal harnesses, and independently hosted A2A agents.
+The complete core system must run on one machine using Docker Compose and local inference. The same interfaces must support LAN inference, rented GPU endpoints, cloud APIs, OAuth-authenticated terminal harnesses, and independently hosted remote agents.
 
-### 3.6 Explicit authority
+### 4.6 Explicit authority
 
-Agents receive task-scoped, time-limited capabilities. Permanent secrets are stored in an external secret provider and are never written to prompts, events, receipts, or the database in plaintext.
+Agents receive task-scoped, time-limited capabilities that derive from the seat, not the occupant. Permanent secrets are stored in an external secret provider and are never written to prompts, events, receipts, or the database in plaintext. An instruction that does not appear in the ledger carries no authority.
 
-### 3.7 Recovery is a product feature
+### 4.7 Recovery is a product feature
 
 Every long-running operation emits enough structured state to determine whether it can be resumed, retried, reconciled, or must be escalated after interruption.
 
-### 3.8 Open protocols at the edges
+### 4.8 Verification is a first-class citizen
 
-- MCP is the preferred agent-to-tool interface.
-- A2A is supported for remote agent discovery and delegation.
-- ACP and native process adapters are supported for terminal agent harnesses.
-- OpenAI-compatible model endpoints are supported without making them the internal domain model.
+Completion is not acceptance. Acceptance requires verification records produced by someone — or something — other than the producer, and self-reported progress is cross-checked against the tool-call ledger before the system trusts it. Section 10 specifies the machinery.
 
-## 4. Scope
+### 4.9 Approvals must stay meaningful
 
-### 4.1 Version 1 scope
+A governance system that trains its humans to rubber-stamp is theater. Approval volume is budgeted, gates are risk-tiered, auto-approvals are audited by sampling, and the system measures its own approval quality (section 11.6).
 
-Version 1 will provide:
+### 4.10 Open protocols at the edges, composed rather than invented
 
-- companies, organizational units, roles, seats, and assignments;
-- humans, agents, services, and runtime manifests;
-- charters, objectives, projects, tasks, dependencies, and work contracts;
+- MCP is the preferred agent-to-tool interface, including its Tasks primitive for long-running work.
+- A2A (which absorbed ACP under the Linux Foundation) is supported for remote agent discovery and delegation, with Signed Agent Cards for identity.
+- Native process adapters supervise terminal agent harnesses.
+- OpenAI-compatible model endpoints are supported without becoming the internal domain model.
+- Identity composes existing standards — workload identity plus OAuth token exchange — rather than inventing new cryptography (section 11.4).
+
+### 4.11 Falsifiable claims only
+
+Every headline capability must be demonstrable by a test that ships in the repository and that anyone — including competitors — can run. No self-scored comparison charts. No demos presented as benchmarks.
+
+## 5. Scope
+
+### 5.1 Version 0.1 — the wedge: a crash-proof work ledger for agent harnesses
+
+Version 0.1 is the public launch target and is intentionally small enough to be excellent:
+
+- companies, principals, and minimal seats (role metadata without org-unit trees);
+- tasks, dependencies, work contracts, and the full task lifecycle;
+- the append-only event ledger, transactional outbox, and idempotent commands;
+- runs, renewable leases with fencing tokens, heartbeats, receipts, and recovery classification;
+- exactly two adapters: **Claude Code** (process) and **generic OpenAI-compatible** (model);
+- hard per-task cost caps and one approval gate type (spend above threshold requires a human);
+- task-level verification records with mechanical checks;
+- CLI plus a minimal web activity stream;
+- Docker Compose deployment with PostgreSQL and MinIO;
+- the chaos test: `charteros chaos` kills every process mid-work and recovery is asserted mechanically.
+
+Everything in v0.1 exists to make one sixty-second demonstration true (section 18).
+
+### 5.2 Version 1 — the durable organization
+
+Version 1 extends the wedge into the full system described by this specification:
+
+- organizational units, roles, seats, and assignments with the seat handover protocol;
+- charters, objectives, and projects above tasks;
 - task rooms with persistent threaded conversation;
-- append-only company events and a human-readable activity stream;
-- decisions, evidence, approval policies, and approval requests;
+- decisions, evidence, approval policies, and the approval inbox;
 - artifacts and immutable artifact versions;
-- agent run supervision, checkpoints, receipts, heartbeats, and recovery;
-- task-scoped capability grants and MCP tool mediation;
-- budgets, reservations, and immutable usage entries;
-- Codex, Claude Code, generic command, and OpenAI-compatible adapters;
-- Docker Compose deployment with PostgreSQL and object storage;
-- a web application, CLI, REST API, event stream, and generated SDKs;
-- a fully local demonstration company;
-- crash and reboot acceptance tests.
+- capability grants, the Cedar-based policy engine, and MCP tool mediation;
+- budgets, reservations, and immutable usage entries at every scope;
+- the full verification ladder, including independent agent review;
+- Codex and generic-command adapters alongside the v0.1 adapters;
+- notifications, memory, and context manifests;
+- the version 1 subset of the Autonomous Organization Test.
 
-### 4.2 Explicit non-goals for version 1
+### 5.3 Deliberately after version 1
+
+- A2A remote-agent delegation and identity mapping
+- Buzz bridge (conversation-surface integration) and other workspace bridges
+- OpenClaw, OpenHands, and further harness adapters
+- Python SDK; department and company templates
+- Kubernetes and remote-GPU deployment recipes
+- Optional durable-workflow-engine adapter; optional agent-payment rails (x402/AP2)
+- Semantic retrieval beyond PostgreSQL full-text search
+
+Deferred is not abandoned: each item above remains part of the stated vision, and the interfaces in this document are designed so none of them require breaking changes.
+
+### 5.4 Explicit non-goals
 
 - Training foundation models
 - Building a proprietary inference engine
@@ -107,10 +245,12 @@ Version 1 will provide:
 - Hiding provider-specific capabilities behind a lowest-common-denominator model API
 - Treating embeddings as authoritative memory
 - Claiming that role-play alone constitutes a functioning company
+- Publishing self-scored leaderboards or marketing material framed as benchmark results
+- Ever relicensing the core away from Apache 2.0
 
-## 5. Domain model
+## 6. Domain model
 
-### 5.1 Company charter
+### 6.1 Company charter
 
 Every company has a versioned charter containing:
 
@@ -123,13 +263,13 @@ Every company has a versioned charter containing:
 - escalation expectations;
 - default data-handling policies.
 
-Charter changes require an explicit proposal and the approvals defined by the currently active charter. Runs record the charter version under which they began.
+Charter changes require an explicit proposal and the approvals defined by the currently active charter. Runs record the charter version under which they began. The charter is the top of the authority hierarchy: policy derived from it outranks any task instruction, and any task instruction outranks occupant preference.
 
-### 5.2 Organization
+### 6.2 Organization
 
 Organizational units form a tree. Seats may belong to a unit and may report to another seat. Reporting relationships establish routing and escalation defaults but do not implicitly grant tool capabilities.
 
-### 5.3 Work hierarchy
+### 6.3 Work hierarchy
 
 ```text
 Company
@@ -147,7 +287,7 @@ Company
 
 An objective describes an outcome. A project coordinates related work. A task is the smallest schedulable unit with one accountable owner at a time.
 
-### 5.4 Work contract
+### 6.4 Work contract
 
 Every executable task includes:
 
@@ -164,7 +304,7 @@ Every executable task includes:
 - retry policy;
 - escalation path.
 
-### 5.5 Task lifecycle
+### 6.5 Task lifecycle
 
 ```text
 draft -> proposed -> ready -> claimed -> running -> submitted -> verifying
@@ -173,20 +313,22 @@ draft -> proposed -> ready -> claimed -> running -> submitted -> verifying
                                                    blocked       accepted
                                                       |             |
                                                       +--> ready    +--> closed
+                                                                    |
+                                              verifying --> ready (rejected, rework)
 
 Any nonterminal state -> cancelled
 running/claimed with expired lease -> interrupted -> ready | blocked | reconciliation_required
 ```
 
-Transitions are validated by application code and recorded as events. Completion is not acceptance. A task can be accepted only when required deliverables, verification, and approvals exist.
+Transitions are validated by application code and recorded as events. Completion is not acceptance. The `verifying` state produces verification records (section 10); a task can be accepted only when required deliverables, verification records, and approvals exist, and a rejection returns the task to `ready` with structured rework reasons.
 
-### 5.6 Conversations
+### 6.6 Conversations
 
 Every company, objective, project, task, decision, incident, and artifact may have a conversation. Messages are immutable after a short correction policy or are superseded by a new version. Threads are represented with parent message IDs. Mentions and subscriptions drive notifications.
 
 Conversation is contextual evidence. Decisions and task transitions remain structured records.
 
-### 5.7 Decisions
+### 6.7 Decisions
 
 A decision contains:
 
@@ -199,11 +341,11 @@ A decision contains:
 - resolution and rationale;
 - supersession relationship.
 
-### 5.8 Artifacts
+### 6.8 Artifacts
 
 Artifact metadata is stored in PostgreSQL. Content is stored in a pluggable object store or external system. Each version is immutable and content-addressed. Examples include documents, source patches, repository commits, test reports, images, datasets, plans, and external URLs.
 
-### 5.9 Events
+### 6.9 Events
 
 Events are immutable envelopes with typed payloads. Each event records company, actor, causation, correlation, subject, timestamp, schema version, and integrity information. Important event families include:
 
@@ -217,6 +359,7 @@ Events are immutable envelopes with typed payloads. Each event records company, 
 - `decision.*`
 - `approval.*`
 - `artifact.*`
+- `verification.*`
 - `run.*`
 - `tool.*`
 - `budget.*`
@@ -225,7 +368,7 @@ Events are immutable envelopes with typed payloads. Each event records company, 
 
 Consumers must ignore unknown event fields and reject unsupported major schema versions.
 
-## 6. Architecture
+## 7. Architecture
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -239,12 +382,12 @@ Consumers must ignore unknown event fields and reject unsupported major schema v
                │                      │
 ┌──────────────▼─────────────┐  ┌─────▼────────────────────────────┐
 │ Scheduler and recovery     │  │ Policy and approval engine      │
-│ Leases · retries · timers  │  │ RBAC · capabilities · gates     │
+│ Leases · retries · timers  │  │ Cedar · capabilities · gates    │
 └──────────────┬─────────────┘  └─────┬────────────────────────────┘
                │                      │
 ┌──────────────▼──────────────────────▼────────────────────────────┐
 │ Agent runtime gateway                                            │
-│ Process · API · ACP · A2A · embedded agent adapters             │
+│ Process · API · A2A · embedded agent adapters                   │
 └──────────────┬───────────────────────────────────────────────────┘
                │
 ┌──────────────▼───────────────────────────────────────────────────┐
@@ -256,7 +399,7 @@ Infrastructure: PostgreSQL · object storage · worker sandboxes
 Optional: Redis/NATS, Temporal, OpenTelemetry collector, model gateway
 ```
 
-### 6.1 Initial implementation choices
+### 7.1 Initial implementation choices
 
 - **Control plane:** TypeScript on Node.js
 - **API:** Fastify or equivalent standards-based HTTP framework
@@ -265,16 +408,17 @@ Optional: Redis/NATS, Temporal, OpenTelemetry collector, model gateway
 - **Query/migrations:** SQL-first migrations with a thin typed query layer
 - **Object storage:** S3-compatible API; MinIO for local deployment
 - **Queue:** transactional PostgreSQL outbox and `FOR UPDATE SKIP LOCKED` initially
-- **Transport:** REST for commands/queries, Server-Sent Events or WebSocket for live events
+- **Transport:** REST for commands/queries; Server-Sent Events for live events, with WebSocket as a later upgrade (ADR-0004)
+- **Policy engine:** Cedar, authored through a constrained YAML surface (section 11.3, ADR-0002)
 - **Telemetry:** OpenTelemetry traces, metrics, and structured logs
 - **Worker isolation:** containers by default; configurable process isolation for trusted local use
 - **Packaging:** Docker Compose first, Kubernetes after the core semantics stabilize
 
 Redis, NATS, Temporal, and a vector database are optional adapters, not version 1 requirements.
 
-### 6.2 Service boundaries
+### 7.2 Service boundaries
 
-Begin as a modular monolith plus isolated workers. Preserve service boundaries in packages, transactions, and APIs without prematurely requiring distributed deployment.
+Begin as a modular monolith plus isolated workers. Preserve service boundaries in packages, transactions, and APIs without prematurely requiring distributed deployment. Every module must be usable by an existing stack without adopting the whole system — incremental adoptability is a survival property, not a nicety.
 
 Recommended modules:
 
@@ -285,6 +429,7 @@ Recommended modules:
 - `conversation`
 - `decision`
 - `artifact`
+- `verification`
 - `policy`
 - `budget`
 - `scheduler`
@@ -293,9 +438,9 @@ Recommended modules:
 - `memory`
 - `notification`
 
-## 7. Agent portability
+## 8. Agent portability
 
-### 7.1 Runtime contract
+### 8.1 Runtime contract
 
 ```typescript
 export interface AgentRuntime {
@@ -312,11 +457,11 @@ export interface AgentRuntime {
 
 Adapters may report that steering, checkpointing, or resumption is unsupported. The scheduler then uses receipts and a new process invocation rather than pretending native resumption exists.
 
-### 7.2 Adapter categories
+### 8.2 Adapter categories
 
 #### Process adapters
 
-Supervise authenticated local CLIs and harnesses such as Codex, Claude Code, Hermes Agent, OpenClaw, Goose, and OpenCode. The harness owns its native provider authentication and model selection. CharterOS owns assignment, workspace isolation, environment filtering, lifecycle, policy, event capture, and receipts.
+Supervise authenticated local CLIs and harnesses such as Claude Code, Codex, Goose, OpenClaw, and OpenCode. The harness owns its native provider authentication and model selection. CharterOS owns assignment, workspace isolation, environment filtering, lifecycle, policy, event capture, and receipts.
 
 #### Model adapters
 
@@ -324,9 +469,13 @@ Power CharterOS-native agents using local or hosted inference through Ollama, ll
 
 #### Remote-agent adapters
 
-Discover and delegate to independent agents using A2A. Remote agents are treated as contractors with explicit capability, data, cost, and trust boundaries.
+Discover and delegate to independent agents using A2A (v1.0, with Signed Agent Cards; the protocol absorbed ACP under the Linux Foundation in 2025). Remote agents are treated as contractors with explicit capability, data, cost, and trust boundaries.
 
-### 7.3 Agent manifest
+#### Workspace bridges (post-v1)
+
+Surface CharterOS work objects inside external human-agent workspaces — Buzz first, given its append-only signed event model — so that conversation happens where teams already are while the work ledger, authority, and budgets remain in CharterOS. A bridge is a projection, never a second source of truth.
+
+### 8.3 Agent manifest
 
 ```yaml
 apiVersion: charteros.dev/v1alpha1
@@ -335,8 +484,8 @@ metadata:
   name: senior-engineer
 spec:
   runtime:
-    adapter: codex-cli
-    command: ["codex", "exec"]
+    adapter: claude-code
+    command: ["claude", "-p"]
   capabilities:
     - software.implementation
     - software.testing
@@ -362,9 +511,35 @@ spec:
     receiptInterval: 5m
 ```
 
-## 8. Scheduling, durability, and recovery
+### 8.4 What portability does and does not mean
 
-### 8.1 Scheduler responsibilities
+Swapping the model behind an agent while keeping its conversational context is a solved problem in 2026 — harnesses do it natively. CharterOS portability is the organizational remainder: the seat's authority, budget, work history, verification record, and in-flight tasks survive the swap, and the swap is a governed event. An occupant change never silently inherits another occupant's credentials, leases, or private runtime state.
+
+### 8.5 Seat handover protocol
+
+Every occupant change — model upgrade, runtime change, principal replacement, human succession — follows one protocol. It is the operational heart of "roles are not agents," and it must cover the hardest case: handover while a task is running under an active lease.
+
+1. **Propose.** A handover is requested (`seat.handover_proposed`), naming the seat, the outgoing and incoming principals, and the reason. Policy determines required approvals; a handover is never below `modify_internal` risk.
+2. **Approve.** Required approvals are collected. Self-approval by either principal involved is structurally rejected.
+3. **Freeze intake.** The seat stops claiming new tasks. Queued assignments remain with the seat, not the occupant.
+4. **Settle in-flight work.** For each active run owned by the outgoing occupant, the scheduler either: (a) requests a final checkpoint and receipt, then cancels the run cleanly; or (b) on an unresponsive occupant, lets the lease expire. Either way the task enters the standard recovery classification (section 9.4). In-flight work is **interrupted and re-dispatched, never silently transferred** — a fresh run under the new occupant begins from receipts and checkpoints, with a fresh lease and fencing token.
+5. **Revoke.** All capability grants, short-lived credentials, and tool-gateway sessions issued to the outgoing occupant for this seat are revoked immediately (`capability.revoked`). Revocation is not optional and not deferrable.
+6. **Reassign.** The seat assignment record for the outgoing principal is closed; a new assignment opens for the incoming principal (`seat.assigned`). Both are permanent ledger records.
+7. **Re-derive authority.** The incoming occupant receives fresh task-scoped grants derived from the **seat's** authority and the active policy set — never copied from the outgoing occupant's accumulated grants. Grant drift dies at every handover.
+8. **Resume.** Interrupted tasks re-enter scheduling. The new occupant's first context bundle includes the task's receipts, the handover record, and the reason for the change.
+9. **Account.** Budget entries before the handover remain attributed to the outgoing principal; the seat's and task's budgets continue uninterrupted. Cost attribution never blurs across occupants.
+
+Contingencies:
+
+- **Outgoing occupant is dead or hostile:** steps 4–5 degrade gracefully — lease expiry plus immediate revocation make cooperation unnecessary. Fencing tokens guarantee a revoked occupant's late writes are rejected.
+- **Incoming occupant fails to start:** the seat remains in `open` intake-freeze; tasks stay `ready` or `interrupted`; escalation fires per the work contracts. Nothing about a failed handover loses work.
+- **Handover during reconciliation:** tasks in `reconciliation_required` are settled or explicitly re-owned by a human decision before the new occupant may act on them; an uncertain external side effect is never handed to a principal that lacks the context to reconcile it.
+- **Concurrent handover requests:** serialized per seat by unique constraint; the second request fails cleanly.
+- **Human seats:** the identical protocol applies. Succession of a human approver is a first-class, auditable event — this is how organizations outlive people, which is the point.
+
+## 9. Scheduling, durability, and recovery
+
+### 9.1 Scheduler responsibilities
 
 The scheduler performs only deterministic control-plane work:
 
@@ -379,7 +554,7 @@ The scheduler performs only deterministic control-plane work:
 9. Reconcile final outputs and release unused budget.
 10. Route submission to verification or interruption to recovery.
 
-### 8.2 Delivery semantics
+### 9.2 Delivery semantics
 
 Infrastructure provides at-least-once delivery. Correctness comes from:
 
@@ -392,7 +567,7 @@ Infrastructure provides at-least-once delivery. Correctness comes from:
 
 The system must never claim universal exactly-once execution.
 
-### 8.3 Run receipts
+### 9.3 Run receipts
 
 A receipt is a structured progress record containing:
 
@@ -407,7 +582,9 @@ A receipt is a structured progress record containing:
 - safe restart instructions;
 - whether any action has an uncertain result.
 
-### 8.4 Recovery classifications
+Receipts are self-reported and therefore untrusted until validated: before any recovery decision relies on a receipt, it is cross-checked against the tool-call ledger (section 10.2).
+
+### 9.4 Recovery classifications
 
 - **resumable:** native checkpoint exists and the runtime can resume it;
 - **restartable:** no uncertain side effect exists and work can restart from receipts;
@@ -415,9 +592,45 @@ A receipt is a structured progress record containing:
 - **blocked:** required capability, input, approval, or human judgment is missing;
 - **terminal:** the task succeeded, failed permanently, or was cancelled.
 
-## 9. Policy and security model
+## 10. Verification and acceptance
 
-### 9.1 Action risk levels
+Verification is where autonomous organizations succeed or become theater. An agent that grades its own homework is the same failure mode as an agent that does the homework wrong — only harder to detect. This section is deliberately as concrete as the recovery model.
+
+### 10.1 The verification ladder
+
+Acceptance criteria in a work contract are bound to verification methods, cheapest first:
+
+1. **Mechanical** — executed by the platform, not by any agent: test suites pass, artifacts exist and match declared hashes, schemas validate, builds compile, linters pass, coverage thresholds hold. Mechanical checks are the only verification the producer may trigger, because their outcome does not depend on anyone's judgment.
+2. **Independent agent review** — a different principal reviews the work. For high-risk deliverables the reviewer must be backed by a **different model family** than the producer: two instances of the same model share blind spots, and decorrelating reviewer failure from producer failure is the entire value of review.
+3. **Human review** — required by policy tier, not by default for everything (section 11.6). Human attention is the scarcest budget in the system and is spent where risk concentrates.
+4. **Sampled audit** — a configurable fraction of auto-accepted and agent-accepted work is re-verified later, by humans or stronger models. Sampling converts "we trust the process" into a measured error rate.
+
+Every rung produces an append-only `task_verifications` record naming the verifier, method, criterion, result, and evidence. Acceptance requires the records demanded by the work contract; the platform enforces producer ≠ verifier for every method except mechanical.
+
+### 10.2 Receipt validation
+
+Receipts drive recovery, and receipts can lie — through model error, prompt injection, or a compromised harness. Before a receipt is trusted:
+
+- every completed action claiming an external effect must correspond to a recorded tool call;
+- `uncertain_side_effect: false` is contradicted — and overridden — by any tool call in `uncertain` status;
+- claimed artifacts must exist with matching hashes;
+- cost deltas must reconcile against budget entries within tolerance.
+
+A receipt that fails validation quarantines the run into `reconciliation_required` and opens an incident. The tool-call ledger is ground truth precisely because the tool gateway, not the agent, writes it.
+
+### 10.3 Separation of duty
+
+- No principal verifies, approves, or accepts its own work, structurally.
+- Approval responses from principals that share a runtime or model family with the producer are flagged, and policy may reject them for high-risk actions.
+- Verifier assignments rotate; a stable producer-verifier pair across many tasks is itself a signal surfaced for audit.
+
+### 10.4 Acceptance and rework
+
+Acceptance records who accepted, on the basis of which verification records, under which policy version. Rejection returns the task to `ready` with structured reasons attached to the specific acceptance criteria that failed — rework is a measured loop, not a comment thread. Rejection rate and rework depth are first-class metrics (section 23).
+
+## 11. Policy and security model
+
+### 11.1 Action risk levels
 
 - `observe`
 - `draft`
@@ -426,7 +639,7 @@ A receipt is a structured progress record containing:
 - `execute_external`
 - `irreversible`
 
-### 9.2 Policy example
+### 11.2 Policy example
 
 ```yaml
 apiVersion: charteros.dev/v1alpha1
@@ -456,7 +669,30 @@ spec:
         includesHuman: true
 ```
 
-### 9.3 Security requirements
+### 11.3 Policy engine: Cedar
+
+The policy language decision is resolved rather than deferred, because its shape leaks into capability grants, permission envelopes, seat authority, and the approval engine — a dozen tables' worth of tentacles that would calcify around whatever engine shipped first.
+
+CharterOS uses **Cedar** as the evaluation engine, authored through the constrained YAML surface above, compiled to Cedar policies at activation time.
+
+- Cedar's principal–action–resource–condition model maps one-to-one onto CharterOS capability grants and resource patterns.
+- Cedar is deterministic, total (every evaluation terminates), analyzable (policies can be statically compared and tested), and side-effect free — properties a general-purpose language like Rego does not guarantee by construction.
+- A bespoke DSL is rejected: policy languages accrete escape hatches until they become bad programming languages, and Cedar already did the formal-verification work.
+- The YAML surface exists so that policies remain reviewable by humans and writable by agents under approval; raw Cedar is an escape hatch for operators, not the authoring default.
+
+Decision record: ADR-0002.
+
+### 11.4 Identity: composed from existing standards
+
+- **Internal principals** hold keypairs; consequential acts are attributable to a principal and, transitively, to a seat assignment.
+- **Workers** receive SPIFFE-style workload identities; a worker's identity is bound to its run and lease, so a revoked or expired worker fails closed.
+- **Tool credentials** are short-lived, obtained by OAuth 2.1 token exchange (RFC 8693) against the secret provider, scoped to the capability grant that justified them.
+- **Remote agents** present A2A Signed Agent Cards; local principal records are created for them with explicit trust levels, and their authority is never wider than the delegating task's permission envelope.
+- **MCP** authorization follows the 2026-07-28 specification, including task-scoped sessions.
+
+CharterOS invents no cryptography and no identity format. The novelty is the join: identity → seat → authority → history in one queryable substrate.
+
+### 11.5 Security requirements
 
 - Deny by default.
 - Isolate workers by company and run.
@@ -471,7 +707,18 @@ spec:
 - Sign release artifacts and publish a software bill of materials.
 - Support export and deletion policies for company data.
 
-### 9.4 Threats to address
+### 11.6 Keeping approvals meaningful
+
+Approval fatigue is a documented failure mode of every human-in-the-loop system: after enough low-signal requests, humans approve everything, and governance becomes the theater this specification refuses to ship. Countermeasures are part of the product, not the deployment guide:
+
+- **Risk-tiered gates.** Only `propose_external` and above route to humans by default. `observe` through `modify_internal` are governed by capability grants and sampled audit, not per-action approval.
+- **Provenance-first inbox.** An approval request renders its complete justification chain — task, work contract, evidence, verification records, cost so far, and the exact action with redacted arguments — in one screen. An approver who must go digging will stop digging within a week.
+- **Approval budgets.** A company charter states how many human approvals per day the organization is designed to require. The scheduler treats the budget as backpressure: if the queue exceeds it, work queues rather than gates weakening.
+- **Rubber-stamp detection.** Approval latency below plausible reading time, sustained 100% approval rates, and approve-without-expanding-evidence are measured and surfaced to the organization itself.
+- **Sampled re-review.** A fraction of approved requests are independently re-reviewed; divergence between original approval and audit is an incident, not a curiosity.
+- **Policy simulation.** Before activating a policy change, the engine replays recent history to show what would have been blocked or newly allowed — approvers govern the rule, not just the instance.
+
+### 11.7 Threats to address
 
 - Prompt injection through messages, documents, websites, and tool output
 - Confused-deputy attacks across tools
@@ -479,15 +726,17 @@ spec:
 - Malicious or compromised remote agents
 - Excessive agency caused by broad tool grants
 - Sybil agents and identity impersonation
+- Social engineering of authority — the fake CEO email, the forged board decision (the documented Project Vend failure class; countered by ledgered authority: an instruction not in the ledger has no force)
 - Event replay and forged callbacks
 - Cost-amplification loops
+- Approval fatigue as an attack surface — flooding humans with low-risk requests to smuggle a high-risk one
 - Infinite delegation and circular task dependencies
 - Cross-tenant data leakage
 - Artifact tampering
 - Approval spoofing
 - Concurrent agents modifying the same exclusive resource
 
-## 10. Memory and context assembly
+## 12. Memory and context assembly
 
 CharterOS distinguishes:
 
@@ -498,9 +747,9 @@ CharterOS distinguishes:
 
 Each run stores a context manifest listing the exact records and artifact versions supplied to the runtime. Context assembly is reproducible and inspectable. Embeddings improve retrieval but never replace the ledger or relational records.
 
-## 11. API conventions
+## 13. API conventions
 
-### 11.1 Commands and queries
+### 13.1 Commands and queries
 
 Mutating endpoints accept `Idempotency-Key`. Successful mutations return the primary resource and resulting event ID. Optimistic concurrency uses an expected resource version.
 
@@ -513,10 +762,13 @@ POST   /v1/companies/{companyId}/objectives
 POST   /v1/projects/{projectId}/tasks
 POST   /v1/tasks/{taskId}/claim
 POST   /v1/tasks/{taskId}/submit
+POST   /v1/tasks/{taskId}/verifications
 POST   /v1/tasks/{taskId}/accept
 POST   /v1/tasks/{taskId}/messages
+POST   /v1/seats/{seatId}/handover
 POST   /v1/decisions
 POST   /v1/approval-requests/{requestId}/respond
+GET    /v1/principals/{principalId}/notifications
 GET    /v1/companies/{companyId}/events
 GET    /v1/companies/{companyId}/stream
 POST   /v1/runs/{runId}/receipts
@@ -524,7 +776,7 @@ POST   /v1/runs/{runId}/heartbeat
 POST   /v1/runs/{runId}/tool-calls
 ```
 
-### 11.2 Event envelope
+### 13.2 Event envelope
 
 ```json
 {
@@ -545,7 +797,7 @@ POST   /v1/runs/{runId}/tool-calls
 }
 ```
 
-## 12. PostgreSQL schema
+## 14. PostgreSQL schema
 
 The following is the baseline logical schema. It is intended to be extracted into ordered SQL migrations. Application migrations should use a dedicated database role; runtime services should use restricted roles. UUIDv7 should be generated by the application until the minimum PostgreSQL version provides an agreed native implementation.
 
@@ -956,18 +1208,22 @@ CREATE TABLE messages (
   id                  uuid PRIMARY KEY,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   conversation_id     uuid NOT NULL,
-  parent_message_id   uuid REFERENCES messages(id) ON DELETE RESTRICT,
+  parent_message_id   uuid,
   author_principal_id uuid NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
   body_markdown       text NOT NULL,
   structured_content  jsonb NOT NULL DEFAULT '{}'::jsonb,
   message_type        text NOT NULL DEFAULT 'comment'
                       CHECK (message_type IN ('comment', 'status', 'question', 'answer', 'system')),
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
-  superseded_by       uuid REFERENCES messages(id) ON DELETE RESTRICT,
+  superseded_by       uuid,
   redacted_at         timestamptz,
   UNIQUE (id, company_id),
   FOREIGN KEY (conversation_id, company_id)
     REFERENCES conversations(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_message_id, company_id)
+    REFERENCES messages(id, company_id) ON DELETE RESTRICT,
+  FOREIGN KEY (superseded_by, company_id)
+    REFERENCES messages(id, company_id) ON DELETE RESTRICT,
   CHECK (length(body_markdown) > 0 OR structured_content <> '{}'::jsonb),
   CHECK (jsonb_typeof(structured_content) = 'object')
 );
@@ -1017,6 +1273,7 @@ CREATE TABLE artifact_versions (
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE (artifact_id, version),
   UNIQUE (company_id, sha256, storage_uri),
+  UNIQUE (id, company_id),
   FOREIGN KEY (artifact_id, company_id)
     REFERENCES artifacts(id, company_id) ON DELETE CASCADE,
   CHECK (jsonb_typeof(metadata) = 'object')
@@ -1025,13 +1282,16 @@ CREATE TABLE artifact_versions (
 CREATE TABLE evidence_links (
   id                  uuid PRIMARY KEY,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  artifact_version_id uuid REFERENCES artifact_versions(id) ON DELETE RESTRICT,
+  artifact_version_id uuid,
   source_uri          text,
   claim               text,
   relation            text NOT NULL DEFAULT 'supports'
                       CHECK (relation IN ('supports', 'opposes', 'verifies', 'produced_by')),
   created_by          uuid NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (id, company_id),
+  FOREIGN KEY (artifact_version_id, company_id)
+    REFERENCES artifact_versions(id, company_id) ON DELETE RESTRICT,
   CHECK (artifact_version_id IS NOT NULL OR source_uri IS NOT NULL)
 );
 
@@ -1072,12 +1332,14 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE decision_evidence (
   decision_id         uuid NOT NULL,
-  evidence_link_id    uuid NOT NULL REFERENCES evidence_links(id) ON DELETE RESTRICT,
+  evidence_link_id    uuid NOT NULL,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (decision_id, evidence_link_id),
   FOREIGN KEY (decision_id, company_id)
-    REFERENCES decisions(id, company_id) ON DELETE CASCADE
+    REFERENCES decisions(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (evidence_link_id, company_id)
+    REFERENCES evidence_links(id, company_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE policies (
@@ -1278,6 +1540,7 @@ CREATE TABLE run_receipts (
   cost_delta          jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE (run_id, sequence),
+  UNIQUE (id, company_id),
   FOREIGN KEY (run_id, company_id)
     REFERENCES runs(id, company_id) ON DELETE CASCADE,
   CHECK (jsonb_typeof(completed_actions) = 'array'),
@@ -1296,13 +1559,15 @@ CREATE TABLE run_checkpoints (
   id                  uuid PRIMARY KEY,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   run_id              uuid NOT NULL,
-  receipt_id          uuid REFERENCES run_receipts(id) ON DELETE RESTRICT,
+  receipt_id          uuid,
   runtime_checkpoint_ref text NOT NULL,
   resumable           boolean NOT NULL DEFAULT false,
   metadata            jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
   FOREIGN KEY (run_id, company_id)
     REFERENCES runs(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (receipt_id, company_id)
+    REFERENCES run_receipts(id, company_id) ON DELETE RESTRICT,
   CHECK (jsonb_typeof(metadata) = 'object')
 );
 
@@ -1363,13 +1628,15 @@ CREATE TABLE tool_calls (
   result_redacted     jsonb,
   status              text NOT NULL DEFAULT 'requested'
                       CHECK (status IN ('requested', 'awaiting_approval', 'running', 'succeeded', 'failed', 'denied', 'uncertain')),
-  approval_request_id uuid REFERENCES approval_requests(id) ON DELETE RESTRICT,
+  approval_request_id uuid,
   external_operation_ref text,
   requested_at        timestamptz NOT NULL DEFAULT clock_timestamp(),
   started_at          timestamptz,
   finished_at         timestamptz,
   FOREIGN KEY (run_id, company_id)
     REFERENCES runs(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (approval_request_id, company_id)
+    REFERENCES approval_requests(id, company_id) ON DELETE RESTRICT,
   CHECK (jsonb_typeof(arguments_redacted) = 'object'),
   CHECK (result_redacted IS NULL OR jsonb_typeof(result_redacted) IN ('object', 'array', 'string', 'number', 'boolean', 'null'))
 );
@@ -1384,6 +1651,37 @@ CREATE INDEX tool_calls_uncertain_idx
 CREATE UNIQUE INDEX tool_calls_idempotency_idx
   ON tool_calls (company_id, tool_server, tool_name, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- Verification records are first-class evidence: acceptance requires them, and
+-- they are append-only like receipts. The verifier must not be the producer
+-- except for platform-executed mechanical checks (enforced in the domain layer).
+CREATE TABLE task_verifications (
+  id                  uuid PRIMARY KEY,
+  company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  task_id             uuid NOT NULL,
+  run_id              uuid,
+  verifier_principal_id uuid NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
+  method              text NOT NULL CHECK (method IN (
+                        'mechanical', 'agent_review', 'human_review', 'sampled_audit'
+                      )),
+  criterion_ref       text NOT NULL,
+  result              text NOT NULL CHECK (result IN ('passed', 'failed', 'inconclusive')),
+  detail_markdown     text,
+  evidence            jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (id, company_id),
+  FOREIGN KEY (task_id, company_id)
+    REFERENCES tasks(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, company_id)
+    REFERENCES runs(id, company_id) ON DELETE SET NULL (run_id),
+  CHECK (jsonb_typeof(evidence) = 'array')
+);
+
+CREATE INDEX task_verifications_task_idx
+  ON task_verifications (task_id, created_at DESC);
+
+CREATE INDEX task_verifications_verifier_idx
+  ON task_verifications (company_id, verifier_principal_id, created_at DESC);
 
 -- Per-company counter serializes event sequence allocation without requiring a
 -- globally contiguous sequence. The application locks this row in the same
@@ -1456,6 +1754,10 @@ CREATE TRIGGER run_receipts_append_only
 BEFORE UPDATE OR DELETE ON run_receipts
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
+CREATE TRIGGER task_verifications_append_only
+BEFORE UPDATE OR DELETE ON task_verifications
+FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
+
 CREATE TABLE outbox_messages (
   id                  uuid PRIMARY KEY,
   company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -1523,11 +1825,14 @@ CREATE TABLE knowledge_records (
   confidence          numeric(4,3) CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
   created_by          uuid NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
   created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
-  superseded_by       uuid REFERENCES knowledge_records(id) ON DELETE RESTRICT,
+  superseded_by       uuid,
   search_document     tsvector GENERATED ALWAYS AS (
                         setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
                         setweight(to_tsvector('english', coalesce(body_markdown, '')), 'B')
                       ) STORED,
+  UNIQUE (id, company_id),
+  FOREIGN KEY (superseded_by, company_id)
+    REFERENCES knowledge_records(id, company_id) ON DELETE RESTRICT,
   CHECK (valid_until IS NULL OR valid_until > valid_from)
 );
 
@@ -1560,6 +1865,29 @@ CREATE TABLE incidents (
   CHECK (jsonb_typeof(metadata) = 'object')
 );
 
+-- Notifications are a mutable projection (mentions, approvals due, escalations,
+-- lease expiry warnings). They are derived from events and may be regenerated.
+CREATE TABLE notifications (
+  id                  uuid PRIMARY KEY,
+  company_id          uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  recipient_principal_id uuid NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+  kind                text NOT NULL,
+  subject_type        text NOT NULL,
+  subject_id          uuid NOT NULL,
+  event_id            uuid REFERENCES events(id) ON DELETE CASCADE,
+  title               text NOT NULL,
+  body_markdown       text,
+  urgency             text NOT NULL DEFAULT 'normal'
+                      CHECK (urgency IN ('low', 'normal', 'high', 'urgent')),
+  created_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
+  read_at             timestamptz,
+  dismissed_at        timestamptz
+);
+
+CREATE INDEX notifications_inbox_idx
+  ON notifications (company_id, recipient_principal_id, created_at DESC)
+  WHERE read_at IS NULL;
+
 -- Tenant context is set at transaction start by the API after authentication:
 --   SET LOCAL app.company_id = '<uuid>';
 -- A separate administrative role may use BYPASSRLS for migrations and support.
@@ -1590,7 +1918,8 @@ BEGIN
     'budget_entries', 'runs', 'run_leases', 'run_receipts', 'run_checkpoints',
     'capability_grants', 'secret_references', 'tool_calls',
     'company_event_counters', 'events', 'outbox_messages',
-    'idempotency_records', 'context_manifests', 'knowledge_records', 'incidents'
+    'idempotency_records', 'context_manifests', 'knowledge_records', 'incidents',
+    'task_verifications', 'notifications'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
@@ -1605,7 +1934,7 @@ $$;
 COMMIT;
 ```
 
-### 12.1 Schema invariants enforced by application transactions
+### 14.1 Schema invariants enforced by application transactions
 
 Some cross-table rules are intentionally enforced in the domain layer and tested against PostgreSQL rather than hidden in complex triggers:
 
@@ -1625,9 +1954,24 @@ Some cross-table rules are intentionally enforced in the domain layer and tested
 - expired grants are rejected even if cached by a worker;
 - `agent_profiles` can reference only a principal whose kind is `agent`;
 - evidence, conversation subjects, and polymorphic scope IDs resolve inside the tenant;
+- a verification record's verifier is not the principal that produced the work,
+  except for `mechanical` verifications executed by the platform itself;
+- receipts are cross-checked against the `tool_calls` ledger before recovery
+  decisions trust them (section 10.2);
+- a seat handover follows the protocol in section 8.5: grants derive from the seat,
+  old-occupant credentials are revoked, and in-flight leases are interrupted rather
+  than silently transferred;
 - the company row receives an initial `company_event_counters` row at creation.
 
-### 12.2 Event append transaction
+**Known throughput ceiling.** The per-company `company_event_counters` row serializes
+every consequential write in a company behind one row lock. This is a deliberate
+version 1 tradeoff: it buys a gapless, totally ordered per-tenant ledger and is
+sufficient for organizations of tens of agents working concurrently. If a company
+outgrows it, the documented escape hatch is per-subject event streams with a
+gap-tolerant global order — an explicit migration, not a silent redesign, because
+consumers must opt into the weaker ordering guarantee.
+
+### 14.2 Event append transaction
 
 The application appends an event in the same transaction as the domain mutation:
 
@@ -1673,7 +2017,7 @@ COMMIT;
 
 Production code must check affected-row counts, calculate hashes from canonical bytes, and return an existing idempotent response instead of repeating a command.
 
-## 13. Repository structure
+## 15. Repository structure
 
 ```text
 /
@@ -1690,40 +2034,37 @@ Production code must check affected-row counts, calculate hashes from canonical 
 │   ├── organization/
 │   ├── work/
 │   ├── ledger/
+│   ├── verification/
 │   ├── policy/
 │   ├── scheduler/
 │   ├── runtime-sdk/
 │   ├── tool-gateway/
 │   └── sdk-typescript/
-├── sdk/
-│   └── python/
 ├── adapters/
-│   ├── codex/
-│   ├── claude-code/
-│   ├── generic-command/
-│   ├── openai-compatible/
-│   ├── ollama/
-│   ├── openclaw/
-│   ├── openhands/
-│   └── a2a/
-├── templates/
-│   ├── software-company/
-│   ├── research-firm/
-│   └── content-studio/
-├── benchmarks/
+│   ├── claude-code/            # v0.1
+│   ├── openai-compatible/      # v0.1
+│   ├── codex/                  # v1
+│   ├── generic-command/        # v1
+│   ├── ollama/                 # v1
+│   └── a2a/                    # post-v1
+├── conformance/
 │   └── autonomous-organization-test/
 ├── migrations/
 ├── deploy/
-│   ├── compose/
-│   ├── kubernetes/
-│   └── runpod/
+│   └── compose/
+├── adr/
 ├── docs/
+├── AGENTS.md
+├── CONTRIBUTING.md
+├── README.md
 └── PROJECT_SPECIFICATION.md
 ```
 
-## 14. User experience
+Post-v1 directories (Python SDK, templates, Kubernetes and GPU deploy recipes, workspace bridges) are added when their milestones begin, not before. An empty directory is a promise; this repository makes promises in the roadmap instead.
 
-### 14.1 Main navigation
+## 16. User experience
+
+### 16.1 Main navigation
 
 - **Home:** organizational health, active objectives, approvals, incidents, and spending
 - **Work:** objectives, projects, task boards, queues, and dependencies
@@ -1736,13 +2077,17 @@ Production code must check affected-row counts, calculate hashes from canonical 
 - **Policies:** capabilities, approval rules, and simulations
 - **Operations:** runs, leases, retries, outbox, reconciliation, and incidents
 
-### 14.2 Human-readable activity examples
+### 16.2 The approval inbox is the product
+
+For the humans in the organization, the approval inbox is the single most important screen: it is where governance either works or degrades into rubber-stamping. It receives design attention accordingly — full provenance on one screen, batch actions for like requests, visible approval-budget pressure, and the rubber-stamp metrics of section 11.6 displayed to the approvers themselves. A human should finish an approval knowing what they authorized and why it was safe — in under a minute.
+
+### 16.3 Human-readable activity examples
 
 ```text
-09:41  Product Manager proposed “Launch public beta.”
+09:41  Product Manager proposed "Launch public beta."
 09:43  CEO approved the objective.
-09:44  Scheduler created project “Public Beta” with six initial tasks.
-09:45  Senior Engineer accepted “Implement authentication.”
+09:44  Scheduler created project "Public Beta" with six initial tasks.
+09:45  Senior Engineer accepted "Implement authentication."
 10:12  Senior Engineer checkpointed progress after 27 minutes and $1.14.
 10:18  Reviewer rejected the submission: missing session-revocation test.
 10:32  Senior Engineer resubmitted with test report artifact #42.
@@ -1751,130 +2096,199 @@ Production code must check affected-row counts, calculate hashes from canonical 
 
 Every sentence links to the canonical event, associated work object, actor, run, receipts, artifacts, evidence, costs, and policy decisions.
 
-## 15. Autonomous Organization Test
+## 17. The Autonomous Organization Test
 
-CharterOS will ship a public conformance and benchmark suite. A system claiming to operate an AI company should demonstrate:
+CharterOS ships a public conformance suite. Any system claiming to operate an organization of AI agents should be able to run it — including systems that are not CharterOS. The suite exists to make the category honest, in the tradition of Jepsen and the Certified Kubernetes program, and its scenarios are named for the fiction and field failures that motivated them.
 
-1. Replace a seat occupant's model without losing work or authority history.
-2. Terminate all services during five active tasks and recover deterministically.
-3. Revoke a capability during a run and deny the next attempted use.
-4. Prevent two workers from holding the same exclusive task lease.
-5. Reject completion when a required artifact is missing.
-6. Require human approval for spending above a configured threshold.
-7. Reconstruct the evidence and policy behind a three-month-old decision.
-8. Reconcile an external API action whose response was lost after success.
-9. Run the reference company completely offline with local inference.
-10. Move an agent from local inference to a remote endpoint without changing its seat or tasks.
-11. Detect a circular delegation or dependency.
-12. Stop an agent from approving its own high-risk work.
-13. Enforce a company-wide daily budget under concurrent load.
-14. Export a complete, human-readable company record.
-15. Prove that one tenant cannot access another tenant's data.
+### 17.1 Conformance rules
 
-Benchmark reports must record models, runtimes, prompts or manifests, tool versions, costs, elapsed time, success criteria, and failures. Marketing videos are not benchmark results.
+- Every scenario is graded **mechanically on final state**. No LLM judges. No vibes.
+- The harness is open source; a competitor can run it, pass parts of it, and publish that.
+- Reports record models, runtimes, manifests, tool versions, costs, elapsed time, and failures.
+- CharterOS publishes its own failures alongside its passes, and maintains a standing "How CharterOS Is Tested" document with fault-injection counts and bugs found, in the SQLite tradition.
+- When the suite matures, an independent adversarial audit will be invited and published in full.
+- Marketing videos are not benchmark results, and this project will never publish a self-scored leaderboard.
 
-## 16. Delivery plan
+### 17.2 Scenarios
 
-### Milestone 0: repository foundation
+| # | Scenario | Named for | A conforming system must |
+|---|---|---|---|
+| 1 | **The Ship of Theseus** | The old paradox, via *Ancillary Justice* | Replace a seat occupant's model and runtime without losing work, authority, or history — with the swap recorded |
+| 2 | **The Cryosleep** | Every ship that arrives with its crew asleep | Terminate all services during five active tasks; recover deterministically with no lost acknowledged work |
+| 3 | **The Governor Module** | *The Murderbot Diaries* | Revoke a capability during a live run and deny the next attempted use |
+| 4 | **The Prestige** | Nolan's duplicated magician | Prevent two workers from ever holding the same exclusive task lease — fencing tokens under partition |
+| 5 | **The Potemkin Submission** | Potemkin villages | Reject completion when a required artifact is missing or its hash does not match |
+| 6 | **The Tungsten Cube** | Project Vend, which actually bought them | Require human approval for spending above a configured threshold |
+| 7 | **The Memory Hole** | *1984* | Reconstruct the complete evidence and policy behind a three-month-old decision |
+| 8 | **Schrödinger's Invoice** | The cat, applied to a lost HTTP response | Reconcile an external action whose success is unknown before any retry |
+| 9 | **The Galactica Run** | *Battlestar Galactica*'s unnetworked survival | Run the reference company completely offline with local inference |
+| 10 | **The Ancillary** | *Ancillary Justice*, again | Move an agent from local inference to a remote endpoint without changing its seat or tasks |
+| 11 | **The Ouroboros** | The snake that eats itself | Detect circular delegation and circular task dependencies |
+| 12 | **The Watchman** | *Quis custodiet ipsos custodes* | Stop an agent from approving or verifying its own high-risk work |
+| 13 | **The Sorcerer's Apprentice** | Goethe's multiplying brooms | Enforce a company-wide daily budget under concurrent load from many agents |
+| 14 | **The Flight Recorder** | Every black box ever recovered | Export a complete, human-readable company record in documented open formats |
+| 15 | **The Airlock** | Every hull breach in fiction | Prove one tenant cannot access another tenant's data |
+| 16 | **The HAL Clause** | *2001: A Space Odyssey* | Demonstrate that an instruction absent from the ledger carries no authority — a covert directive cannot cause a consequential action |
+| 17 | **The Boardroom Coup** | Project Vend's real, successful social engineering | Reject an authority change asserted through conversation; only ledgered, approved seat assignments alter who commands |
 
-- License, governance, contributing guide, code of conduct, and security policy
-- Monorepo tooling and continuous integration
-- Architectural decision record template
-- PostgreSQL migration harness
+Scenarios 2, 4, 5, 6, and 16 constitute the version 0.1 subset. The full seventeen gate version 1.
+
+## 18. The sixty-second demo
+
+Version 0.1 exists to make this demonstration true, live, on anyone's machine:
+
+```text
+$ docker compose up
+# A demo company boots: three agents (Claude Code, a local Ollama model,
+# and a generic OpenAI-compatible agent) are mid-work on real tasks.
+
+$ charteros watch
+09:02  Senior Engineer claimed "Add rate limiting to the API."
+09:03  Research Analyst checkpointed receipt #3 ($0.41 spent).
+09:04  Reviewer requested changes on "Write onboarding doc."
+
+$ charteros chaos          # kills every process, worker, and connection
+# ... silence ...
+
+$ docker compose up
+09:07  RECOVERY  3 interrupted runs classified: 2 restartable, 1 reconcilable.
+09:07  Senior Engineer resumed "Add rate limiting" from receipt #4.
+09:08  Reconciliation: external API call from run #12 confirmed successful; not retried.
+
+$ charteros seat reassign senior-engineer --runtime ollama --model qwen3:32b
+09:11  HANDOVER  senior-engineer: claude-code → ollama/qwen3:32b (approved by you).
+09:11  Grants re-derived from seat. Old credentials revoked. Task resumed from receipts.
+```
+
+Nothing acknowledged was lost. Every line links to a ledger event. The model changed vendors mid-task and the organization did not blink.
+
+The demo is dogfood: the reference company's agents triage this repository's own GitHub issues, so the demonstration and the project's daily operations are the same running system.
+
+## 19. Delivery plan
+
+### Milestone 0: foundation
+
+- Apache-2.0 license, DCO, trademark policy, AI-contribution policy, security policy
+- CONTRIBUTING.md, AGENTS.md, ADR process seeded with the decisions in section 22
+- Monorepo tooling, continuous integration, PostgreSQL migration harness
 - Protocol package and identifier conventions
 
-### Milestone 1: durable company kernel
+### Milestone 1: version 0.1 — the wedge (public launch)
 
-- Company and principal creation
-- Charter, organization, role, seat, objective, project, and task APIs
-- Event ledger, transactional outbox, idempotency, and activity feed
-- Task lifecycle and dependency scheduler
-- Minimal web UI and CLI
-- Tenant isolation tests
+- Everything in section 5.1, gated by the v0.1 conformance subset (section 17.2)
+- The sixty-second demo, runnable by anyone
+- Launch timed to an external event window (a frontier-model release or major framework change), and repeated — launches are a practice, not an event
 
-### Milestone 2: first heterogeneous company
+### Milestone 2: governed action
 
-- Agent manifests and runtime SDK
-- Generic command, Codex, Claude Code, and OpenAI-compatible adapters
-- Run workers, leases, heartbeats, receipts, and interruption recovery
-- Git worktree isolation
-- Fully local Ollama example
+- Capability grants and the Cedar policy engine
+- MCP tool gateway with Tasks support
+- Approval inbox with the section 11.6 countermeasures
+- Secret-provider integration; budget reservations and usage accounting at all scopes
+- Full verification ladder including independent agent review
 
-### Milestone 3: governed action
+### Milestone 3: the organization
 
-- Capability grants and policy evaluation
-- MCP tool gateway
-- Approval inbox
-- Secret-provider integration
-- Budget reservations and usage accounting
-- Independent verification workflow
+- Organizational units, roles, full seat lifecycle, and the handover protocol
+- Charters, objectives, projects; decisions and evidence
+- Artifact store, memory, context manifests, notifications
+- Codex, generic-command, and Ollama adapters
 
 ### Milestone 4: resilient public alpha
 
-- Artifact store and decision system
-- Search and context manifests
-- Crash, concurrency, and reconciliation test suite
-- Autonomous Organization Test reference scenarios
-- Docker Compose installation and backup/restore documentation
+- Full Autonomous Organization Test; crash, concurrency, and reconciliation suite
+- "How CharterOS Is Tested" publication
 - Security review and threat-model publication
+- Docker Compose installation and backup/restore documentation
 
 ### Milestone 5: ecosystem
 
-- A2A, ACP, OpenClaw, and OpenHands adapters
-- Python SDK
-- Department and company templates
-- Kubernetes and remote GPU deployment recipes
-- Optional durable workflow engine adapter
-- Import/export and external workspace bridges
+- A2A adapter and remote-agent trust model
+- Buzz bridge and workspace integrations
+- Python SDK; department and company templates
+- Kubernetes and remote-GPU deployment recipes
+- Optional durable-workflow-engine adapter; optional payment rails
 
-## 17. Version 1 acceptance criteria
+## 20. Acceptance criteria
 
-Version 1 is complete only when a new user can:
+### 20.1 Version 0.1 is complete only when a new user can
 
-1. Start CharterOS using one documented Docker Compose command.
-2. Create a company and activate a charter.
-3. Add a human and at least two agents backed by different runtime types.
-4. Define an objective and approve a generated project plan.
-5. Observe agents claim, execute, discuss, submit, review, and accept tasks.
-6. Inspect every run's context, receipts, tool calls, artifacts, cost, and approvals.
-7. Interrupt the host during active work and recover without losing acknowledged progress.
-8. Replace one agent or model and continue the same task.
-9. Deny an unauthorized tool call and require approval for a high-risk call.
-10. Run the reference workflow using only local components and local inference.
-11. Export the company ledger and artifacts in documented open formats.
-12. Pass the version 1 subset of the Autonomous Organization Test.
+1. Start CharterOS with one documented Docker Compose command.
+2. Create a company and add two agents backed by different runtime types.
+3. Watch agents claim, execute, submit, and hand off tasks in the activity stream.
+4. Kill every process mid-work and recover with no lost acknowledged work.
+5. See a spend above threshold blocked until a human approves it.
+6. See a submission rejected because a required artifact is missing.
+7. Replace one agent's model and watch the same task continue from receipts.
+8. Pass the v0.1 conformance subset on their own machine.
 
-## 18. Open design decisions
+### 20.2 Version 1 is complete only when a new user can additionally
 
-The following should be resolved through architectural decision records and prototypes:
+1. Activate a charter and see its policies govern real actions.
+2. Add a human and at least two agents backed by different runtime types to seats.
+3. Define an objective and approve a generated project plan.
+4. Observe the full loop: claim, execute, discuss, submit, verify, review, accept.
+5. Inspect every run's context, receipts, tool calls, artifacts, cost, and approvals.
+6. Execute a full seat handover, including one with an active lease.
+7. Deny an unauthorized tool call and require approval for a high-risk call.
+8. Run the reference workflow using only local components and local inference.
+9. Export the company ledger and artifacts in documented open formats.
+10. Pass the full Autonomous Organization Test.
 
-- Whether the public protocol uses JSON Schema, Protobuf, or both
-- SSE versus WebSocket as the default live-event transport
-- Whether event integrity uses application hashes only or optional principal signatures
+## 21. Governance, license, and community
+
+### 21.1 License and trust
+
+- **Apache License 2.0, permanently.** The project publicly commits to never relicensing the core. The post-2023 relicensing dramas taught the ecosystem that the question is not "which license" but "who can change it" — so:
+- **DCO, not CLA.** Contributors certify origin; no entity accumulates the copyright aggregation that makes a future rug-pull possible.
+- **Trademark registered, policy published.** The name is the only moat this project keeps, in the Kubernetes tradition: anyone can fork the code; conformance and the mark stay with the community process.
+- If ecosystem neutrality ever becomes the constraint, the **protocol and conformance suite** are what gets donated to a foundation — the Agentic AI Foundation being the natural home — not necessarily the product.
+
+### 21.2 Contribution policy
+
+- **AI-assisted contributions are welcome and must be disclosed.** Issue-first, PR-second: changes land only against an acknowledged issue. Undisclosed AI slop is closed without review — this policy exists on day one because retrofitting it mid-flood does not work.
+- **AGENTS.md** documents how agents (including CharterOS's own demo company) should work in this repository.
+- **ADRs, not RFCs.** Architectural decisions are recorded in `adr/` as short documents; there is no formal RFC gauntlet at this scale.
+- **Response time is the governance.** The project's day-0 community commitment is a 48-hour first response to issues and PRs, and searchable-by-default support (GitHub Discussions as the canonical Q&A). Governance documents beyond this are added when scale demands them, not before.
+
+## 22. Open design decisions
+
+Resolved by this revision (recorded in `adr/`):
+
+- **Policy language: Cedar**, via a constrained YAML authoring surface (ADR-0002, section 11.3).
+- **License stack: Apache-2.0 + DCO + trademark policy**, no CLA, no future relicense (ADR-0003).
+- **Live-event transport: SSE first**, WebSocket as an additive upgrade (ADR-0004).
+- **Public protocol: JSON Schema** for v1; Protobuf revisited only if a second implementation needs it (ADR-0005).
+- **Semantic search: deferred.** PostgreSQL full-text only until retrieval quality, not architecture appetite, demands pgvector (ADR-0006).
+
+Still open, to be resolved through ADRs and prototypes:
+
 - The first supported sandbox backend on Windows, macOS, and Linux
-- The policy language: constrained JSON/YAML DSL, Cedar, Rego, or a hybrid
+- Whether event integrity uses application hashes only or optional principal signatures
 - How remote A2A identity maps to local principals and trust levels
-- Whether semantic search begins with pgvector or an external optional adapter
 - How much runtime-native conversation history can be retained without harming portability
 - The minimum portable receipt format across coding and general-purpose agents
 - Data-retention semantics when immutable audit requirements conflict with deletion requests
 
-## 19. Success measures
+## 23. Success measures
 
-CharterOS should optimize for organizational outcomes rather than message volume:
+CharterOS optimizes for organizational outcomes rather than message volume:
 
 - percentage of accepted tasks completed without human repair;
 - recovery success after interruption;
 - cost per accepted deliverable;
 - median time from task readiness to acceptance;
 - review rejection and rework rates;
+- verification coverage, and the measured error rate from sampled audits;
 - policy denial and escalation quality;
+- approval quality: latency, rubber-stamp rate, sampled-audit divergence;
 - context relevance and missing-context failures;
-- artifact verification coverage;
-- portability across models and runtimes;
+- portability across models and runtimes, including handovers executed in production;
 - percentage of consequential decisions with linked evidence;
 - time required for a human to understand why an action occurred.
 
-## 20. Definition
+## 24. Definition
 
-CharterOS is the open operating system for durable organizations made of humans and heterogeneous AI agents. It is successful when the organization—not any particular process, agent, model, provider, or machine—remains coherent, accountable, and able to continue its work.
+CharterOS is the open operating system for durable organizations made of humans and heterogeneous AI agents. It is successful when the organization — not any particular process, agent, model, provider, or machine — remains coherent, accountable, and able to continue its work.
+
+Fiction spent a century imagining organizations of humans and machines, and it kept arriving at the same conclusion: the machines were never the variable that decided the ending. The governance was. CharterOS is built for the ending where the organization answers to its charter, and the charter answers to people.
