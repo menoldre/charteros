@@ -18,6 +18,7 @@ This repository is at the **specification stage**. There is no build, no test su
 4. **Do not fabricate.** Every factual claim added to the specification (market, protocol versions, citations) must carry a verifiable source. Claims that cannot be verified are marked as uncertain or omitted.
 5. **Consistency over cleverness.** Match the specification's voice: declarative, terse, falsifiable. If a sentence cannot be wrong, it does not belong in the spec.
 6. **Schema changes** must preserve the invariants of spec §14.1 — tenant-composite foreign keys, append-only tables, RLS coverage for every new table.
+7. **History is append-only.** Never amend, rebase, squash, or force-push anything already pushed to a shared branch. Corrections are new commits that say what they correct — the same rule this project's ledger imposes on everything else. A messy-but-true history outranks a clean-but-rewritten one.
 
 ## When code exists (Milestone 0+)
 
