@@ -1,8 +1,8 @@
 # Intercompany Commerce Protocol
 
-**Status:** Draft for review  
-**Related decision:** ADR-0008 (Proposed)  
-**Tracking issue:** #3  
+**Status:** Draft for review, revision 3 (audit fixes applied)<br>
+**Related decision:** ADR-0008 (Proposed)<br>
+**Tracking issue:** #3<br>
 **Target:** Post-v1 protocol and schema extension
 
 ## 1. Purpose
@@ -116,6 +116,20 @@ The receiving company verifies the proof at message receipt and stores both the
 proof and verification result. Later revocation does not erase an action that was
 valid when accepted, unless the agreement says otherwise.
 
+Revocation and other later restrictions are recorded as appended status
+observations against the stored proof (section 16); the stored proof row itself is
+immutable, and its recorded verification result is the result at receipt time.
+Status observations are monotonic restrictions: `suspended`, `expired`, and
+`revoked` can never restore a proof to `valid`. Resuming authority requires a new
+proof. Effective status is the most restrictive valid observation recorded by the
+receiver, not whichever remote timestamp sorts last. Every binding message is
+evaluated against effective status at the moment of receipt.
+
+Any restriction denies use of that proof. For display and audit, deterministic
+precedence is `revoked` over `expired` over `suspended`; precedence never permits an
+action. Equal or conflicting issuer observations are retained and quarantine the
+proof until verified.
+
 ### 4.3 Local counterparty records
 
 Each company keeps a local record for the remote organization. Local trust status,
@@ -167,18 +181,28 @@ rejection, not best-effort interpretation.
 
 ### 5.3 Activation
 
-An agreement becomes `active` only when:
+Activation is a signed prepare protocol, not a cross-ledger transaction:
 
-1. buyer and seller signatures verify over the same revision hash;
-2. both representatives were authorized at signature time;
-3. neither organization identity or signing key is revoked under the selected
-   identity-assurance profile;
-4. every declared activation condition is satisfied;
-5. required funding evidence exists;
-6. both ledgers record an activation receipt naming the same facts.
+1. Each ledger independently verifies both agreement signatures, representative
+   authority, organization and key status, activation conditions, and required
+   funding evidence.
+2. Each party constructs the same activation snapshot: agreement revision hash,
+   ordered activation-condition results, ordered funding commitment hashes, buyer
+   and seller organization IDs, and protocol version.
+3. Each authorized party signs `activation.prepared` over the snapshot hash and
+   sends it to the other party.
+4. A ledger marks the agreement `active` only after it holds one valid buyer
+   preparation and one valid seller preparation over the identical snapshot hash.
+   Activation is then a deterministic local derivation; neither party waits for an
+   additional “I activated” acknowledgment.
+5. Each ledger emits `agreement.activated` and sends a receipt as evidence. A lost
+   receipt is redelivered idempotently and cannot undo activation.
 
-If the two ledgers disagree, the agreement remains non-active until the mismatch is
-resolved. Local optimism cannot create a bilateral obligation.
+Preparations over different snapshot hashes do not activate anything. Either party
+may issue a new preparation only after the changed funding or conditions produce a
+new snapshot; earlier preparations remain evidence but cannot combine with the new
+hash. This avoids both impossible cross-database atomicity and a two-party
+acknowledgment deadlock.
 
 ## 6. Agreement lifecycle
 
@@ -264,9 +288,13 @@ verification ladder. An acceptance or rejection:
 - records the policy and agreement revision in force;
 - is immutable.
 
-Acceptance atomically creates the corresponding payment obligation in the buyer's
-ledger and a mirrored obligation receipt in the seller's ledger. It never invokes
-a payment provider in the acceptance transaction.
+Acceptance commits atomically in the buyer's ledger together with the payment
+obligation, the local ledger event, and the outbound bilateral message. The
+seller's mirrored obligation is created when that message is applied and
+acknowledged: it is eventually consistent through at-least-once delivery and a
+signed receipt, never assumed. Two independent ledgers cannot share one
+transaction, and this protocol does not pretend otherwise. Acceptance never
+invokes a payment provider in the same transaction.
 
 ## 8. Monetary model
 
@@ -335,6 +363,20 @@ CharterOS supports three funding modes:
 Funding evidence names provider, amount, asset, agreement revision, milestone,
 expiry, conditions, external reference, and evidence hash. “Funded” is never a
 free-form status asserted by an agent.
+
+A funding commitment attaches to one agreement and, when scoped, one milestone
+because activation-condition funding exists before any payment obligation does.
+The immutable commitment fixes its global identifier, mode, provider, amount,
+asset, and scope. Append-only observations record verification, expiry, release,
+refund, invalidation, and the later obligation linkage. An observation cannot
+change the commitment's economic identity. When acceptance creates an obligation,
+an `obligation_linked` observation may connect it only to a commitment for the same
+agreement, milestone, amount, and asset.
+
+Observations are sequenced per commitment by the receiving ledger. Current state is
+a deterministic fold of that sequence under the funding state machine, not the row
+with the greatest wall-clock timestamp. Duplicate evidence returns the prior
+observation; conflicting evidence quarantines the commitment.
 
 Core CharterOS does not pool funds, maintain omnibus balances, or hold private keys
 capable of moving customer funds outside a task-scoped settlement grant.
@@ -552,7 +594,7 @@ disclosing their contents.
 |---|---|
 | Representative loses authority during negotiation | Reject later binding messages; retain prior non-binding history |
 | Authority revoked after a valid signature | Preserve the signature-time fact; apply termination rules if required |
-| One ledger records activation and the other does not | Do not begin bilateral work; exchange receipts and reconcile |
+| One ledger derives activation and the other does not | Exchange missing signed preparations; receipts aid diagnosis but never gate activation |
 | Seller disappears after funding | Apply deadline, cancellation, and escrow terms |
 | Buyer disappears after submission | Apply review deadline and dispute policy; silence is not acceptance unless signed terms explicitly say so |
 | Payment succeeds but response is lost | Enter reconciliation; follow the declared provider strategy; never blind-retry |
@@ -656,6 +698,44 @@ CREATE TABLE commerce_authorization_proofs (
   CHECK (jsonb_typeof(proof_document) = 'object')
 );
 
+-- Proof rows are immutable; verification_status is the result at receipt time.
+-- Later restrictions are append-only and monotonic. A restricted proof is never
+-- reinstated; renewed authority requires a new proof.
+CREATE TABLE commerce_authorization_proof_statuses (
+  id                    uuid PRIMARY KEY,
+  company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  authorization_proof_id uuid NOT NULL,
+  sequence              bigint NOT NULL CHECK (sequence > 0),
+  status                text NOT NULL CHECK (status IN ('suspended', 'revoked', 'expired')),
+  source                text NOT NULL CHECK (source IN (
+                          'issuer_notice', 'status_endpoint', 'local_expiry', 'local_policy'
+                        )),
+  issuer_key_id         text,
+  evidence              jsonb NOT NULL DEFAULT '{}'::jsonb,
+  evidence_sha256       text NOT NULL CHECK (evidence_sha256 ~ '^[0-9a-f]{64}$'),
+  signature             jsonb,
+  effective_at          timestamptz NOT NULL,
+  received_at           timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (authorization_proof_id, sequence),
+  UNIQUE (authorization_proof_id, evidence_sha256),
+  UNIQUE (id, company_id),
+  FOREIGN KEY (authorization_proof_id, company_id)
+    REFERENCES commerce_authorization_proofs(id, company_id) ON DELETE CASCADE,
+  CHECK (jsonb_typeof(evidence) = 'object'),
+  CHECK (signature IS NULL OR jsonb_typeof(signature) = 'object'),
+  CHECK (
+    (source IN ('issuer_notice', 'status_endpoint')
+      AND issuer_key_id IS NOT NULL AND signature IS NOT NULL)
+    OR
+    (source IN ('local_expiry', 'local_policy')
+      AND issuer_key_id IS NULL AND signature IS NULL)
+  )
+);
+
+CREATE INDEX commerce_authorization_proof_statuses_latest_idx
+  ON commerce_authorization_proof_statuses (authorization_proof_id, sequence DESC);
+
 CREATE TABLE commerce_agreements (
   id                    uuid PRIMARY KEY,
   company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -736,6 +816,41 @@ CREATE TABLE commerce_agreement_signatures (
 
 CREATE UNIQUE INDEX commerce_agreement_signatures_one_valid_idx
   ON commerce_agreement_signatures (agreement_revision_id, signer_organization_id)
+  WHERE verification_status = 'valid';
+
+-- Each party signs the same activation snapshot independently. Possessing valid
+-- buyer and seller preparations for one snapshot makes activation a deterministic
+-- local derivation rather than an impossible cross-database commit.
+CREATE TABLE commerce_activation_preparations (
+  id                    uuid PRIMARY KEY,
+  company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  agreement_revision_id uuid NOT NULL,
+  snapshot_document     jsonb NOT NULL,
+  snapshot_sha256       text NOT NULL CHECK (snapshot_sha256 ~ '^[0-9a-f]{64}$'),
+  signer_organization_id text NOT NULL,
+  representative_id     text NOT NULL,
+  authorization_proof_id uuid,
+  key_id                text NOT NULL,
+  algorithm             text NOT NULL,
+  signature             text NOT NULL,
+  preparation_sha256    text NOT NULL CHECK (preparation_sha256 ~ '^[0-9a-f]{64}$'),
+  prepared_at           timestamptz NOT NULL,
+  verification_status   text NOT NULL CHECK (verification_status IN ('valid', 'invalid', 'revoked_at_signing')),
+  verified_at           timestamptz,
+  created_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (agreement_revision_id, signer_organization_id, preparation_sha256),
+  UNIQUE (id, company_id),
+  FOREIGN KEY (agreement_revision_id, company_id)
+    REFERENCES commerce_agreement_revisions(id, company_id) ON DELETE CASCADE,
+  FOREIGN KEY (authorization_proof_id, company_id)
+    REFERENCES commerce_authorization_proofs(id, company_id) ON DELETE RESTRICT,
+  CHECK (jsonb_typeof(snapshot_document) = 'object')
+);
+
+CREATE UNIQUE INDEX commerce_activation_preparations_one_valid_idx
+  ON commerce_activation_preparations (
+    agreement_revision_id, snapshot_sha256, signer_organization_id
+  )
   WHERE verification_status = 'valid';
 
 CREATE TABLE commerce_milestones (
@@ -913,25 +1028,61 @@ CREATE TABLE commerce_obligation_adjustments (
   CHECK (jsonb_typeof(authorization) = 'object')
 );
 
-CREATE TABLE commerce_funding_records (
+-- The commitment fixes economic identity before funding evidence or an obligation
+-- exists. Observations may change state or add an obligation link but cannot reuse
+-- global_funding_id for different terms.
+CREATE TABLE commerce_funding_commitments (
   id                    uuid PRIMARY KEY,
   company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  obligation_id         uuid NOT NULL,
+  global_funding_id     uuid NOT NULL,
+  agreement_id          uuid NOT NULL,
+  milestone_id          uuid,
   funding_mode          text NOT NULL CHECK (funding_mode IN ('promise', 'provider_authorization', 'third_party_escrow')),
   provider_id           text,
-  external_reference    text,
   amount_atomic         numeric(78,0) NOT NULL CHECK (amount_atomic >= 0),
   asset_id              text NOT NULL,
-  status                text NOT NULL CHECK (status IN ('asserted', 'verified', 'expired', 'released', 'refunded', 'invalid')),
+  canonical_sha256      text NOT NULL CHECK (canonical_sha256 ~ '^[0-9a-f]{64}$'),
+  created_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (company_id, global_funding_id),
+  UNIQUE (id, company_id),
+  FOREIGN KEY (agreement_id, company_id)
+    REFERENCES commerce_agreements(id, company_id) ON DELETE RESTRICT,
+  FOREIGN KEY (milestone_id, company_id)
+    REFERENCES commerce_milestones(id, company_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE commerce_funding_observations (
+  id                    uuid PRIMARY KEY,
+  company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  funding_commitment_id uuid NOT NULL,
+  sequence              bigint NOT NULL CHECK (sequence > 0),
+  observation_type      text NOT NULL CHECK (observation_type IN (
+                          'asserted', 'verified', 'obligation_linked', 'expired',
+                          'released', 'refunded', 'invalid', 'conflict'
+                        )),
+  obligation_id         uuid,
+  external_reference    text,
   evidence              jsonb NOT NULL,
   evidence_sha256       text NOT NULL CHECK (evidence_sha256 ~ '^[0-9a-f]{64}$'),
-  valid_until           timestamptz,
+  effective_at          timestamptz,
+  received_at           timestamptz NOT NULL DEFAULT clock_timestamp(),
   created_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (funding_commitment_id, sequence),
+  UNIQUE (funding_commitment_id, evidence_sha256),
   UNIQUE (id, company_id),
+  FOREIGN KEY (funding_commitment_id, company_id)
+    REFERENCES commerce_funding_commitments(id, company_id) ON DELETE CASCADE,
   FOREIGN KEY (obligation_id, company_id)
     REFERENCES commerce_payment_obligations(id, company_id) ON DELETE RESTRICT,
-  CHECK (jsonb_typeof(evidence) = 'object')
+  CHECK (jsonb_typeof(evidence) = 'object'),
+  CHECK (
+    (observation_type = 'obligation_linked' AND obligation_id IS NOT NULL)
+    OR (observation_type <> 'obligation_linked' AND obligation_id IS NULL)
+  )
 );
+
+CREATE INDEX commerce_funding_observations_latest_idx
+  ON commerce_funding_observations (funding_commitment_id, sequence DESC);
 
 CREATE TABLE commerce_invoices (
   id                    uuid PRIMARY KEY,
@@ -1111,10 +1262,10 @@ CREATE TABLE commerce_messages (
     REFERENCES events(id, company_id) ON DELETE RESTRICT,
   CHECK (sender_organization_id <> recipient_organization_id),
   CHECK (jsonb_typeof(envelope) = 'object'),
-  CHECK (
-    (direction = 'inbound' AND received_at IS NOT NULL)
-    OR (direction = 'outbound' AND sent_at IS NOT NULL)
-  )
+  -- Outbound rows are written before dispatch (write-ahead, matching the outbox
+  -- pattern in section 13.2); sent_at is set by the first delivery attempt.
+  CHECK (direction <> 'inbound' OR received_at IS NOT NULL),
+  CHECK (direction <> 'outbound' OR received_at IS NULL)
 );
 
 CREATE TABLE commerce_message_receipts (
@@ -1148,12 +1299,20 @@ CREATE TRIGGER commerce_agreement_signatures_append_only
 BEFORE UPDATE OR DELETE ON commerce_agreement_signatures
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
+CREATE TRIGGER commerce_activation_preparations_append_only
+BEFORE UPDATE OR DELETE ON commerce_activation_preparations
+FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
+
 CREATE TRIGGER commerce_milestone_terms_append_only
 BEFORE UPDATE OR DELETE ON commerce_milestone_terms
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
 CREATE TRIGGER commerce_authorization_proofs_append_only
 BEFORE UPDATE OR DELETE ON commerce_authorization_proofs
+FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
+
+CREATE TRIGGER commerce_authorization_proof_statuses_append_only
+BEFORE UPDATE OR DELETE ON commerce_authorization_proof_statuses
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
 CREATE TRIGGER commerce_submissions_append_only
@@ -1168,8 +1327,12 @@ CREATE TRIGGER commerce_obligation_adjustments_append_only
 BEFORE UPDATE OR DELETE ON commerce_obligation_adjustments
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
-CREATE TRIGGER commerce_funding_records_append_only
-BEFORE UPDATE OR DELETE ON commerce_funding_records
+CREATE TRIGGER commerce_funding_commitments_append_only
+BEFORE UPDATE OR DELETE ON commerce_funding_commitments
+FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
+
+CREATE TRIGGER commerce_funding_observations_append_only
+BEFORE UPDATE OR DELETE ON commerce_funding_observations
 FOR EACH ROW EXECUTE FUNCTION prevent_append_only_mutation();
 
 CREATE TRIGGER commerce_invoices_append_only
@@ -1194,12 +1357,15 @@ DECLARE
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'commerce_counterparties', 'commerce_counterparty_keys',
-    'commerce_authorization_proofs', 'commerce_agreements',
+    'commerce_authorization_proofs', 'commerce_authorization_proof_statuses',
+    'commerce_agreements',
     'commerce_agreement_revisions', 'commerce_agreement_signatures',
+    'commerce_activation_preparations',
     'commerce_milestones', 'commerce_milestone_terms',
     'commerce_submissions', 'commerce_acceptances',
     'commerce_payment_obligations', 'commerce_obligation_adjustments',
-    'commerce_funding_records', 'commerce_invoices',
+    'commerce_funding_commitments', 'commerce_funding_observations',
+    'commerce_invoices',
     'commerce_settlement_attempts', 'commerce_settlement_receipts',
     'commerce_disputes', 'commerce_dispute_events', 'commerce_messages',
     'commerce_message_receipts'
@@ -1221,6 +1387,11 @@ COMMIT;
 
 - Every local foreign reference belongs to the same company.
 - Agreement activation verifies two valid signatures over one revision hash.
+- Agreement activation derives only from valid buyer and seller preparations over
+  one identical snapshot hash; activation receipts are evidence, not another gate.
+- An activation preparation's snapshot hash equals the RFC 8785 canonical hash of
+  its document, includes the active revision and funding commitment hashes, and is
+  signed by the organization occupying the corresponding buyer or seller role.
 - The local company and counterparty occupy opposite roles in the signed envelope.
 - `current_revision` and status projections derive from ledger events.
 - A milestone's active immutable terms belong to the active agreement revision;
@@ -1241,6 +1412,19 @@ COMMIT;
 - A dispute cannot change money without a signed resolution or named adjudicator
   decision permitted by the active agreement.
 - Inbound messages are verified before their domain command executes.
+- A `global_funding_id` names exactly one immutable commitment. Its milestone, if
+  present, belongs to the same agreement; its amount, asset, mode, and provider
+  never change. Sequenced observations supply state and obligation linkage.
+- An `obligation_linked` funding observation may reference only an obligation for
+  the same agreement, milestone, amount, and asset.
+- Authorization status observations only restrict authority. `revoked` and
+  `expired` are terminal for a proof, and no observation restores `valid`; every
+  binding message is evaluated against effective status at receipt time.
+- Issuer-sourced proof restrictions require a verifiable issuer signature. Local
+  expiry and policy restrictions cannot assert issuer authority.
+- An outbound bilateral message row is committed before dispatch; `sent_at`
+  records the first delivery attempt, and delivery completion is proven only by
+  a signed counterparty receipt.
 - Domain mutation, local ledger event, outbox message, and idempotent response
   commit atomically.
 
@@ -1252,10 +1436,11 @@ POST /v1/companies/{companyId}/commerce/agreements
 POST /v1/commerce/agreements/{agreementId}/revisions
 POST /v1/commerce/agreement-revisions/{revisionId}/sign
 POST /v1/commerce/agreements/{agreementId}/activate
+POST /v1/commerce/agreements/{agreementId}/funding-commitments
+POST /v1/commerce/funding-commitments/{commitmentId}/observations
 POST /v1/commerce/milestones/{milestoneId}/submissions
 POST /v1/commerce/submissions/{submissionId}/decision
 GET  /v1/commerce/obligations
-POST /v1/commerce/obligations/{obligationId}/funding-evidence
 POST /v1/commerce/obligations/{obligationId}/settlements
 POST /v1/commerce/settlements/{settlementId}/reconcile
 POST /v1/commerce/agreements/{agreementId}/disputes
@@ -1277,6 +1462,7 @@ counterparty.blocked
 agreement.revision_offered
 agreement.revision_received
 agreement.revision_signed
+agreement.activation_prepared
 agreement.activated
 agreement.suspended
 agreement.terminated
@@ -1286,7 +1472,9 @@ milestone.changes_requested
 milestone.accepted
 obligation.created
 obligation.adjusted
+funding.committed
 funding.verified
+funding.obligation_linked
 invoice.issued
 payment.approval_requested
 payment.started
@@ -1322,6 +1510,13 @@ seller. The offer is retained as an untrusted message and cannot become binding.
 
 Buyer and seller sign different concurrent revisions. Neither ledger activates the
 agreement until both sign one identical hash.
+
+### 19.3.1 The Two Generals
+
+Both parties sign one agreement, then each receives the other's identical
+activation preparation while activation receipts are repeatedly lost. Both ledgers
+derive the same active state without waiting for another acknowledgment; replayed
+preparations and receipts are idempotent.
 
 ### 19.4 Schrödinger's Payroll
 
@@ -1394,3 +1589,62 @@ ADR-0008 may move from Proposed to Accepted only when:
 - the core can complete the conformance flow without taking custody or a fee;
 - security and jurisdiction-specific responsibilities are documented without
   implying that protocol conformance supplies legal compliance.
+
+## 22. Review notes — revision 2 (2026-07-30)
+
+Findings from independent review of revision 1, applied in this revision:
+
+1. **Funding before obligation.** Funding evidence previously required an
+   obligation, but activation-condition funding (sections 5.3 and 9) exists
+   before acceptance creates one. Funding records now attach to the agreement
+   and optionally a milestone, with obligation linkage appended later under the
+   same `global_funding_id`.
+2. **Cross-ledger atomicity overclaim.** Section 7.3 claimed acceptance
+   atomically wrote both ledgers. It now matches section 16.1: atomic in the
+   buyer's ledger with its event and outbound message; the seller's mirror is
+   eventually consistent through acknowledged delivery.
+3. **Proof revocation had no mechanism.** `commerce_authorization_proofs` is
+   append-only with a receipt-time verification result, so later revocation was
+   unrecordable. `commerce_authorization_proof_statuses` now appends status
+   observations, and binding messages are evaluated against effective status.
+4. **Outbound messages could not be written ahead of dispatch.** The
+   `commerce_messages` check demanded `sent_at` at insert, contradicting the
+   outbox pattern in section 13.2. Outbound rows are now written before
+   dispatch, and `sent_at` records the first delivery attempt.
+
+Deferred to the tracking issue; to be resolved before ADR-0008 is accepted:
+
+- **Cumulative monetary ceilings.** Per-action ceilings do not bound the sum of
+  many signings by one representative. Decide whether cumulative limits are
+  protocol or deployment policy, and state the decision either way.
+- **Cross-asset ceiling rule.** State how "settled principal cannot exceed the
+  effective obligation" is evaluated when settlement uses a signed conversion
+  quote (proposed: evaluate in the obligation's asset at the quoted rate).
+- **Conflicting receipts.** Receipt uniqueness permits storing conflicting
+  receipts from one receiver. Storing both is correct for evidence, but the
+  conflict should quarantine further processing on that message until resolved.
+- **Key rotation.** `UNIQUE (counterparty_id, key_id)` forbids re-registering a
+  rotated key identifier; decide whether reuse is an error or needs a
+  validity-window model.
+- **Processing indexes.** Message and dispute queues need operational indexes
+  (for example, on processing status) before implementation.
+- **Milestone-to-task linkage.** The seller's private mapping between commerce
+  milestones and internal tasks should have a defined (local, undisclosed)
+  home so implementations do not invent divergent join tables.
+
+## 23. Audit notes — revision 3 (2026-07-30)
+
+Findings applied after the revision 2 audit:
+
+1. **Activation deadlock.** Requiring both ledgers to record activation before
+   either could activate recreated a two-party commit problem. Activation now
+   derives independently from valid buyer and seller preparations over one exact
+   snapshot hash; post-activation receipts are evidence, not a gate.
+2. **Authority resurrection.** “Latest observation wins” allowed a delayed or
+   malicious `valid` observation to override revocation. Status observations are
+   now monotonic restrictions with local sequence, evidence hash, and signed
+   issuer-source requirements. Restored authority requires a new proof.
+3. **Funding identity drift.** Reusing `global_funding_id` could change agreement,
+   milestone, amount, asset, or provider. An immutable funding commitment now fixes
+   that identity; sequenced observations record state and obligation linkage
+   without redefining it.
